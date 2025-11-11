@@ -29,3 +29,70 @@ model Post {
   authorId  Int
   author    User    @relation(fields: [authorId], references: [id])
 }
+model Recipe {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @db.VarChar(255)
+  description   String?  @db.Text
+  ingredients   Json // string[]
+  steps         Json // string[]
+  difficulty    Int      @default(1)
+  estimatedTime Int      @default(0)
+  source        String?  @db.VarChar(255)
+  category      String?  @db.VarChar(50)
+  glassType     String?  @db.VarChar(50)
+  technique     String?  @db.VarChar(50)
+  garnish       String?  @db.Text
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 关联关系
+  favorites UserFavorite[]
+
+  @@map("recipes")
+}
+
+model UserFavorite {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @db.VarChar(255)
+  recipeId  String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  // 关联关系
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, recipeId])
+  @@index([sessionId, recipeId])
+  @@map("user_favorites")
+}
+
+model KnowledgeDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  title        String   @db.VarChar(255)
+  content      String   @db.Text
+  milvusId     String?  @db.Text
+  metadata     Json? // 文档元数据（文件路径、大小、页数等）
+  documentType String   @default("pdf") @db.VarChar(50)
+  filePath     String?  @db.VarChar(255)
+  fileSize     BigInt?
+  chunkCount   Int      @default(0)
+  isProcessed  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([title])
+  @@map("knowledge_documents")
+}
+
+model RecommendationHistory {
+  id                 String   @id @default(uuid()) @db.Uuid
+  sessionId          String   @db.VarChar(255)
+  ingredients        Json // string[] - 用户输入的原料
+  recommendedRecipes Json // any[] - 推荐的配方数据（JSON格式）
+  queryType          String?  @db.VarChar(50) // 查询类型（如ingredient_match, recipe_search等）
+  searchMetadata     Json? // 搜索元数据（如搜索参数、结果数量等）
+  createdAt          DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@map("recommendation_history")
+}
