@@ -1,7 +1,7 @@
 // @ts-nocheck
 export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
-import { runRagPipeline, queryVectorStore, getRagStatus } from './services/ragService';
+import { runRagPipeline, queryVectorStore, getRagStatus } from '../../services/ragService';
 
 // 初始化RAG系统
 export async function POST(request: NextRequest) {
