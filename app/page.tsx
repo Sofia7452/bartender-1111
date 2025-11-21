@@ -8,6 +8,7 @@ import { Button } from './components/ui/Button';
 import { RecipeCard } from './components/forms/RecipeCard';
 import { Spinner } from './components/ui/Spinner';
 import { Input } from './components/ui/Input';
+import type { CompletePairingRecommendation } from './types/foodPairing';
 
 interface Recipe {
   id: string;
@@ -48,51 +49,105 @@ export default function Home() {
   const [flowchartEnabled, setFlowchartEnabled] = useState(false);
   const [flowchartData, setFlowchartData] = useState<string | null>(null);
 
-  // for cocktail pairing
+  // for cocktail pairing (legacy API - 保留用于向后兼容)
   const [pairingEnabled, setPairingEnabled] = useState(false);
-  const [cuisine, setCuisine] = useState('');
   const [pairingIngredients, setPairingIngredients] = useState<string[]>([]);
   const [isPairingLoading, setIsPairingLoading] = useState(false);
   const [pairingError, setPairingError] = useState<string | null>(null);
 
+  // for LangGraph food pairing (新的多 Agent 系统)
+  const [cuisine, setCuisine] = useState<string>(''); // 菜系选择
+  const [foodIngredients, setFoodIngredients] = useState<string[]>([]); // 食品原料列表
+  const [drinkIngredients, setDrinkIngredients] = useState<string[]>([]); // 酒原料列表
+  const [pairingResult, setPairingResult] = useState<CompletePairingRecommendation | null>(null); // 搭配结果
+  const [isFoodPairingLoading, setIsFoodPairingLoading] = useState(false); // 加载状态
+  const [foodPairingError, setFoodPairingError] = useState<string | null>(null); // 错误信息
+
   const handleGetRecommendations = async () => {
-    if (ingredients.length === 0) return;
-
-    setIsLoading(true);
-    setError(null);
-    setFlowchartData(null);
-
-    try {
-      const response = await fetch('/api/recommend', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ingredients,
-          includeRAG: ragEnabled,
-          includeFlowchart: flowchartEnabled,
-        }),
-      });
-
-      const data: RecommendationResponse = await response.json();
-      console.log('page-推荐接口data', data);
-      console.log('data.data.flowchart', data.data.flowchart);
-
-      if (data.success) {
-        setRecommendations(data.data.recommendations);
-        if (data.data.flowchart) {
-          setFlowchartData(data.data.flowchart);
-        }
-        console.log('推荐结果:', data.data);
-      } else {
-        setError('推荐失败，请稍后重试');
+    // 如果启用了搭配模式，使用新的 LangGraph API
+    if (pairingEnabled) {
+      // 验证输入：至少需要食品原料
+      if (foodIngredients.length === 0) {
+        setFoodPairingError('请至少输入一个食品原料');
+        return;
       }
-    } catch (err) {
-      console.error('推荐请求失败:', err);
-      setError('网络错误，请检查连接');
-    } finally {
-      setIsLoading(false);
+
+      setIsFoodPairingLoading(true);
+      setFoodPairingError(null);
+      setPairingResult(null);
+
+      try {
+        const response = await fetch('/api/food-pairing', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cuisine: cuisine || null,
+            foodIngredients,
+            drinkIngredients: drinkIngredients.length > 0 ? drinkIngredients : undefined,
+          }),
+        });
+
+        const data = await response.json();
+        console.log('🍽️ LangGraph 推荐接口响应:', data);
+
+        if (data.success && data.data) {
+          setPairingResult(data.data);
+          console.log('✅ 推荐结果:', {
+            dishes: data.data.dishes.length,
+            beverages: data.data.beverages.length,
+            pairingReasons: data.data.pairingReasons.length,
+          });
+        } else {
+          setFoodPairingError(data.error || '推荐失败，请稍后重试');
+        }
+      } catch (err) {
+        console.error('❌ 推荐请求失败:', err);
+        setFoodPairingError('网络错误，请检查连接');
+      } finally {
+        setIsFoodPairingLoading(false);
+      }
+    } else {
+      // 使用旧的鸡尾酒推荐 API（向后兼容）
+      if (ingredients.length === 0) return;
+
+      setIsLoading(true);
+      setError(null);
+      setFlowchartData(null);
+
+      try {
+        const response = await fetch('/api/recommend', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ingredients,
+            includeRAG: ragEnabled,
+            includeFlowchart: flowchartEnabled,
+          }),
+        });
+
+        const data: RecommendationResponse = await response.json();
+        console.log('page-推荐接口data', data);
+        console.log('data.data.flowchart', data.data.flowchart);
+
+        if (data.success) {
+          setRecommendations(data.data.recommendations);
+          if (data.data.flowchart) {
+            setFlowchartData(data.data.flowchart);
+          }
+          console.log('推荐结果:', data.data);
+        } else {
+          setError('推荐失败，请稍后重试');
+        }
+      } catch (err) {
+        console.error('推荐请求失败:', err);
+        setError('网络错误，请检查连接');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
