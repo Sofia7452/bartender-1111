@@ -272,71 +272,122 @@ export default function Home() {
             <div className="max-w-2xl mx-auto mb-8">
               <Card>
                 <CardHeader>
-                  <CardTitle>输入菜系或原料</CardTitle>
+                  <CardTitle>输入菜系和食品原料</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <Input
-                      value={cuisine}
-                      onChange={(e) => setCuisine(e.target.value)}
-                      placeholder="输入菜系，如：川菜、日料..."
-                    />
-                    <IngredientInput
-                      value={pairingIngredients}
-                      onChange={setPairingIngredients}
-                      placeholder="输入菜品原料，如：牛肉、海鲜..."
-                      maxIngredients={8}
-                    />
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        菜系类型（可选）
+                      </label>
+                      <Input
+                        value={cuisine}
+                        onChange={(e) => setCuisine(e.target.value)}
+                        placeholder="输入菜系，如：川菜、日料、西餐..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        食品原料 <span className="text-red-500">*</span>
+                      </label>
+                      <IngredientInput
+                        value={foodIngredients}
+                        onChange={setFoodIngredients}
+                        placeholder="输入菜品原料，如：牛肉、海鲜、土豆..."
+                        maxIngredients={8}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* 酒原料输入区域 */}
+            <div className="max-w-2xl mx-auto mb-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>输入酒原料（可选）</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        酒原料列表（可选，不填写将根据菜品自动推荐）
+                      </label>
+                      <IngredientInput
+                        value={drinkIngredients}
+                        onChange={setDrinkIngredients}
+                        placeholder="输入酒原料，如：威士忌、柠檬、糖浆..."
+                        maxIngredients={8}
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
           </>
-        ) : null}
-        {/* 原料输入区域 */}
-        <div className="max-w-2xl mx-auto mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>输入您的原料</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <IngredientInput
-                value={ingredients}
-                onChange={setIngredients}
-                placeholder="输入原料名称，如：威士忌、柠檬、糖浆..."
-                maxIngredients={8}
-              />
-            </CardContent>
-          </Card>
-        </div>
+        ) : (
+          /* 原料输入区域（仅在未启用搭配模式时显示） */
+          <div className="max-w-2xl mx-auto mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>输入您的原料</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <IngredientInput
+                  value={ingredients}
+                  onChange={setIngredients}
+                  placeholder="输入原料名称，如：威士忌、柠檬、糖浆..."
+                  maxIngredients={8}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* 推荐按钮 */}
         <div className="text-center mb-8">
           <Button
             onClick={handleGetRecommendations}
-            disabled={ingredients.length === 0 || isLoading}
-            loading={isLoading}
+            disabled={
+              pairingEnabled
+                ? foodIngredients.length === 0 || isFoodPairingLoading
+                : ingredients.length === 0 || isLoading
+            }
+            loading={pairingEnabled ? isFoodPairingLoading : isLoading}
             size="lg"
             className="px-8 py-3"
           >
-            {isLoading ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                正在推荐...
-              </>
-            ) :
-              (
+            {pairingEnabled ? (
+              isFoodPairingLoading ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  正在推荐...
+                </>
+              ) : (
+                '获取搭配推荐'
+              )
+            ) : (
+              isLoading ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  正在推荐...
+                </>
+              ) : (
                 '获取推荐'
-              )}
+              )
+            )}
           </Button>
         </div>
 
 
         {/* 错误提示 */}
-        {(error || pairingError) && (
+        {(error || pairingError || foodPairingError) && (
           <div className="max-w-2xl mx-auto mb-8">
             <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-600 text-sm">{error || pairingError}</p>
+              <p className="text-red-600 text-sm">
+                {error || pairingError || foodPairingError}
+              </p>
             </div>
           </div>
         )}
