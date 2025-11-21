@@ -68,7 +68,7 @@ export class FoodPairingLangGraphService {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const errorMessages = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        const errorMessages = error.issues.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join(', ');
         throw new Error(`输入验证失败: ${errorMessages}`);
       }
       throw error;
@@ -153,11 +153,24 @@ export class FoodPairingLangGraphService {
       return pairingResult;
     } catch (error: any) {
       const executionTime = Date.now() - startTime;
-      console.error(`❌ LangGraph 执行失败，耗时 ${executionTime}ms:`, error);
+
+      // 记录详细错误日志（包含堆栈跟踪）
+      console.error(`❌ LangGraph 执行失败，耗时 ${executionTime}ms`);
+      console.error('错误详情:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        cause: error?.cause,
+      });
 
       // 提供更友好的错误信息
       if (error instanceof Error) {
-        throw error;
+        // 保留原始错误信息，但确保有友好的消息
+        const friendlyMessage = error.message || '执行失败，请稍后重试';
+        const enhancedError = new Error(friendlyMessage);
+        enhancedError.stack = error.stack;
+        enhancedError.cause = error.cause;
+        throw enhancedError;
       }
       throw new Error(`执行失败: ${error?.message || '未知错误'}`);
     }

@@ -91,7 +91,15 @@ export async function POST(request: NextRequest) {
       });
     } catch (error: any) {
       const executionTime = Date.now() - startTime;
-      console.error(`❌ LangGraph 执行失败，耗时 ${executionTime}ms:`, error);
+
+      // 记录详细错误日志（包含堆栈跟踪）
+      console.error(`❌ LangGraph 执行失败，耗时 ${executionTime}ms`);
+      console.error('错误详情:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        cause: error?.cause,
+      });
 
       // 处理超时错误
       if (error?.message?.includes('timeout') || error?.message?.includes('Timeout')) {
@@ -105,12 +113,31 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // 处理输入验证错误
+      if (error?.message?.includes('输入验证失败') || error?.message?.includes('validation')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message || '输入参数验证失败',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+          },
+          { status: 400 }
+        );
+      }
+
       // 处理其他执行错误
+      const userFriendlyMessage = error?.message || '推荐服务执行失败，请稍后重试';
       return NextResponse.json(
         {
           success: false,
-          error: error?.message || '推荐服务执行失败，请稍后重试',
-          details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+          error: userFriendlyMessage,
+          details: process.env.NODE_ENV === 'development'
+            ? {
+              message: error?.message,
+              stack: error?.stack,
+              name: error?.name,
+            }
+            : undefined,
         },
         { status: 500 }
       );
@@ -133,14 +160,27 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error: any) {
-    console.error('❌ API 处理失败:', error);
+    // 记录未预期错误的详细日志（包含堆栈跟踪）
+    console.error('❌ API 处理失败 - 未预期的错误');
+    console.error('错误详情:', {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+      cause: error?.cause,
+    });
 
     // 处理未预期的错误
     return NextResponse.json(
       {
         success: false,
         error: '服务器内部错误，请稍后重试',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        details: process.env.NODE_ENV === 'development'
+          ? {
+            message: error?.message,
+            stack: error?.stack,
+            name: error?.name,
+          }
+          : undefined,
       },
       { status: 500 }
     );
