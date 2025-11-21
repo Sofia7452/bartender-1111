@@ -7,6 +7,7 @@ import { IngredientInput } from './components/forms/IngredientInput';
 import { Button } from './components/ui/Button';
 import { RecipeCard } from './components/forms/RecipeCard';
 import { Spinner } from './components/ui/Spinner';
+import { Input } from './components/ui/Input';
 
 interface Recipe {
   id: string;
@@ -47,6 +48,13 @@ export default function Home() {
   const [flowchartEnabled, setFlowchartEnabled] = useState(false);
   const [flowchartData, setFlowchartData] = useState<string | null>(null);
 
+  // for cocktail pairing
+  const [pairingEnabled, setPairingEnabled] = useState(false);
+  const [cuisine, setCuisine] = useState('');
+  const [pairingIngredients, setPairingIngredients] = useState<string[]>([]);
+  const [isPairingLoading, setIsPairingLoading] = useState(false);
+  const [pairingError, setPairingError] = useState<string | null>(null);
+
   const handleGetRecommendations = async () => {
     if (ingredients.length === 0) return;
 
@@ -85,6 +93,39 @@ export default function Home() {
       setError('网络错误，请检查连接');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGetPairing = async () => {
+    if (!cuisine && pairingIngredients.length === 0) return;
+
+    setIsPairingLoading(true);
+    setPairingError(null);
+
+    try {
+      const response = await fetch('/api/cocktail-pairing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cuisine,
+          ingredients: pairingIngredients,
+        }),
+      });
+
+      const data: RecommendationResponse = await response.json();
+
+      if (data.success) {
+        setRecommendations(data.data.recommendations);
+      } else {
+        setPairingError('配餐推荐失败，请稍后重试');
+      }
+    } catch (err) {
+      console.error('配餐推荐请求失败:', err);
+      setPairingError('网络错误，请检查连接');
+    } finally {
+      setIsPairingLoading(false);
     }
   };
 
@@ -149,6 +190,15 @@ export default function Home() {
                   />
                   <span className="text-sm">生成流程图</span>
                 </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={pairingEnabled}
+                    onChange={(e) => setPairingEnabled(e.target.checked)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">搭配菜提供调酒</span>
+                </label>
                 <Button
                   onClick={handleInitializeRAG}
                   variant="outline"
@@ -161,6 +211,33 @@ export default function Home() {
           </Card>
         </div>
 
+        {pairingEnabled ? (
+          <>
+            {/* 菜品输入区域 */}
+            <div className="max-w-2xl mx-auto mb-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>输入菜系或原料</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <Input
+                      value={cuisine}
+                      onChange={(e) => setCuisine(e.target.value)}
+                      placeholder="输入菜系，如：川菜、日料..."
+                    />
+                    <IngredientInput
+                      value={pairingIngredients}
+                      onChange={setPairingIngredients}
+                      placeholder="输入菜品原料，如：牛肉、海鲜..."
+                      maxIngredients={8}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        ) : null}
         {/* 原料输入区域 */}
         <div className="max-w-2xl mx-auto mb-8">
           <Card>
@@ -192,17 +269,19 @@ export default function Home() {
                 <Spinner size="sm" className="mr-2" />
                 正在推荐...
               </>
-            ) : (
-              '获取推荐'
-            )}
+            ) :
+              (
+                '获取推荐'
+              )}
           </Button>
         </div>
 
+
         {/* 错误提示 */}
-        {error && (
+        {(error || pairingError) && (
           <div className="max-w-2xl mx-auto mb-8">
             <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-600 text-sm">{error}</p>
+              <p className="text-red-600 text-sm">{error || pairingError}</p>
             </div>
           </div>
         )}
@@ -247,7 +326,7 @@ export default function Home() {
         )}
 
         {/* 空状态 */}
-        {ingredients.length === 0 && (
+        {!pairingEnabled && ingredients.length === 0 && (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🍸</div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
