@@ -33,22 +33,25 @@ model Recipe {
   id            String   @id @default(uuid()) @db.Uuid
   name          String   @db.VarChar(255)
   description   String?  @db.Text
-  ingredients   Json // string[]
-  steps         Json // string[]
-  difficulty    Int      @default(1)
-  estimatedTime Int      @default(0)
-  source        String?  @db.VarChar(255)
-  category      String?  @db.VarChar(50)
-  glassType     String?  @db.VarChar(50)
-  technique     String?  @db.VarChar(50)
-  garnish       String?  @db.Text
-  notes         String?  @db.Text
+  ingredients   Json // string[] - 原料列表
+  steps         Json // string[] - 制作步骤列表
+  difficulty    Int      @default(1) // 难度等级，1-5
+  estimatedTime Int      @default(0) // 预估制作时间（分钟）
+  source        String?  @db.VarChar(255) // 来源信息
+  category      String?  @db.VarChar(50) // 分类，如 "鸡尾酒"、"红酒"、"白酒" 等
+  glassType     String?  @db.VarChar(50) // 杯型
+  technique     String?  @db.VarChar(50) // 调制技巧
+  garnish       String?  @db.Text // 装饰
+  notes         String?  @db.Text // 备注
+  tags          Json? // string[] - 分类标签
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   // 关联关系
-  favorites UserFavorite[]
+  favorites     UserFavorite[] // 用于收藏 Recipe（包括鸡尾酒和酒品）
 
+  @@index([category])
+  @@index([name])
   @@map("recipes")
 }
 
@@ -96,3 +99,63 @@ model RecommendationHistory {
   @@index([sessionId, createdAt])
   @@map("recommendation_history")
 }
+
+// ============================================
+// 菜品与酒品搭配推荐系统数据库模型
+// ============================================
+
+model Dish {
+  id                 String   @id @default(uuid()) @db.Uuid
+  name               String   @db.VarChar(255)
+  description        String?  @db.Text
+  cuisine            String?  @db.VarChar(50) // 所属菜系
+  requiredIngredients Json // string[] - 所需食材列表
+  cookingTime        Int      @default(30) // 烹饪时间（分钟）
+  difficulty         Int      @default(3) // 难度等级，1-5
+  steps              Json // string[] - 烹饪步骤列表
+  source             String?  @db.VarChar(255) // 来源信息
+  tags               Json? // string[] - 分类标签
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // 关联关系
+  favorites          DishFavorite[]
+
+  @@index([cuisine])
+  @@index([name])
+  @@map("dishes")
+}
+
+
+model FoodPairingHistory {
+  id                 String   @id @default(uuid()) @db.Uuid
+  sessionId          String   @db.VarChar(255)
+  cuisine            String?  @db.VarChar(50) // 用户输入的菜系
+  foodIngredients    Json // string[] - 食品原料
+  drinkIngredients   Json? // string[] - 酒原料（可选）
+  recommendedDishes  Json // DishRecommendation[] - 推荐的菜品列表
+  recommendedBeverages Json // BeverageRecommendation[] - 推荐的酒品列表（对应 Recipe 模型）
+  pairingReasons     Json // PairingReason[] - 搭配理由列表
+  overallSuggestion  String?  @db.Text // 整体搭配建议
+  metadata           Json? // 元数据（执行时间、模型信息等）
+  createdAt          DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@map("food_pairing_history")
+}
+
+model DishFavorite {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @db.VarChar(255)
+  dishId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  // 关联关系
+  dish Dish @relation(fields: [dishId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, dishId])
+  @@index([sessionId, dishId])
+  @@index([sessionId, createdAt])
+  @@map("dish_favorites")
+}
+
