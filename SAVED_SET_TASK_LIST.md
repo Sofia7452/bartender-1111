@@ -111,7 +111,7 @@ SavedSet (套装)
   - 批量创建 SavedSetRecipe 关联记录
   - 返回完整的套装数据（包含 Dish 和 Recipe 详情）
 
-#### 2.2 [ ] 实现套装收藏 API 端点
+#### 2.2 [x] 实现套装收藏 API 端点
 - 在 `app/api/` 目录下创建 `saved-sets/route.ts` 文件
 - 实现 `POST /api/saved-sets` 接口：
   - 接收请求体：`{ dish: DishRecommendation, recipeIds: string[], name?: string, description?: string }`
@@ -127,7 +127,7 @@ SavedSet (套装)
   - 验证 sessionId 权限（只能删除自己的套装）
   - 删除 SavedSet 及其关联的 SavedSetRecipe 记录（级联删除）
 
-#### 2.3 [ ] 验证并维护单独收藏逻辑完整性
+#### 2.3 [x] 验证并维护单独收藏逻辑完整性
 - 检查 `app/api/favorites/route.ts` 中的现有逻辑
 - 确保新增的 SavedSet 功能不影响现有的 Recipe 单独收藏功能
 - 确保新增的 Dish 模型不影响现有的业务逻辑
@@ -137,11 +137,11 @@ SavedSet (套装)
 
 ### 3. [ ] 类型定义更新 (Type Definition Update)
 
-#### 3.1 [ ] 更新 Prisma 客户端类型
+#### 3.1 [x] 更新 Prisma 客户端类型
 - 运行 `npx prisma generate` 生成最新的 Prisma 客户端类型
 - 验证新生成的类型包含 `Dish`、`SavedSet`、`SavedSetRecipe` 模型
 
-#### 3.2 [ ] 创建或更新 TypeScript 类型文件
+#### 3.2 [x] 创建或更新 TypeScript 类型文件
 - 在 `app/types/` 目录下创建或更新 `savedSet.ts` 文件
 - 定义 `SavedSet` 接口类型（包含关联的 Dish 和 Recipe 数组）
 - 定义 API 请求和响应的类型：
