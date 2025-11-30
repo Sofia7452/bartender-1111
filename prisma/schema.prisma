@@ -29,6 +29,29 @@ model Post {
   authorId  Int
   author    User    @relation(fields: [authorId], references: [id])
 }
+
+model Dish {
+  id                  String   @id @default(uuid()) @db.Uuid
+  name                String   @db.VarChar(255)
+  description         String?  @db.Text
+  cuisine             String   @db.VarChar(100)
+  requiredIngredients Json // string[] - 所需食材列表，包含用量信息
+  cookingTime         Int      @default(30) // 烹饪时间（分钟）
+  difficulty          Int      @default(3) // 难度等级，1-5
+  steps               Json // string[] - 烹饪步骤列表
+  source              String?  @db.VarChar(255)
+  tags                Json? // string[] - 分类标签（可选）
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // 关联关系
+  savedSets SavedSet[]
+
+  @@index([name])
+  @@index([cuisine])
+  @@map("dishes")
+}
+
 model Recipe {
   id            String   @id @default(uuid()) @db.Uuid
   name          String   @db.VarChar(255)
@@ -47,7 +70,8 @@ model Recipe {
   updatedAt     DateTime @updatedAt
 
   // 关联关系
-  favorites UserFavorite[]
+  favorites       UserFavorite[]
+  savedSetRecipes SavedSetRecipe[]
 
   @@map("recipes")
 }
@@ -64,6 +88,41 @@ model UserFavorite {
   @@unique([sessionId, recipeId])
   @@index([sessionId, recipeId])
   @@map("user_favorites")
+}
+
+model SavedSet {
+  id          String   @id @default(uuid()) @db.Uuid
+  sessionId   String   @db.VarChar(255)
+  dishId      String   @db.Uuid
+  name        String?  @db.VarChar(255) // 套装名称（可选，用于用户自定义命名）
+  description String?  @db.Text // 套装描述（可选）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关联关系
+  dish    Dish             @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  recipes SavedSetRecipe[]
+
+  @@unique([sessionId, dishId])
+  @@index([sessionId])
+  @@index([dishId])
+  @@map("saved_sets")
+}
+
+model SavedSetRecipe {
+  id         String   @id @default(uuid()) @db.Uuid
+  savedSetId String   @db.Uuid
+  recipeId   String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  // 关联关系
+  savedSet SavedSet @relation(fields: [savedSetId], references: [id], onDelete: Cascade)
+  recipe   Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([savedSetId, recipeId])
+  @@index([savedSetId])
+  @@index([recipeId])
+  @@map("saved_set_recipes")
 }
 
 model KnowledgeDocument {
