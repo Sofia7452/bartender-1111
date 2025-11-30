@@ -32,21 +32,22 @@ export const Footer: React.FC<FooterProps> = ({ className = '' }) => {
                   推荐配方
                 </Link>
               </li>
-              <li>
+              {/* 暂时隐藏"我的推荐"和"设置"入口 */}
+              {/* <li>
                 <Link href="/recommendations" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">
                   我的推荐
                 </Link>
-              </li>
+              </li> */}
               <li>
                 <Link href="/favorites" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">
                   收藏夹
                 </Link>
               </li>
-              <li>
+              {/* <li>
                 <Link href="/settings" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">
                   设置
                 </Link>
-              </li>
+              </li> */}
             </ul>
           </div>
 
