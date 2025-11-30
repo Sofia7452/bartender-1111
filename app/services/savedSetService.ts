@@ -4,8 +4,27 @@
  * 提供菜品和套装收藏相关的业务逻辑
  */
 
+import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma';
 import type { DishRecommendation } from '../types/foodPairing';
+
+/**
+ * 验证字符串是否为有效的 UUID 格式
+ */
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
+/**
+ * 确保 ID 是有效的 UUID，如果不是则生成新的 UUID
+ */
+function ensureValidUUID(id: string | undefined): string {
+  if (!id || !isValidUUID(id)) {
+    return randomUUID();
+  }
+  return id;
+}
 
 /**
  * 保存或获取 Dish 记录
@@ -16,20 +35,29 @@ import type { DishRecommendation } from '../types/foodPairing';
  */
 export async function saveDish(dishData: DishRecommendation) {
   try {
+    // 确保 dish.id 是有效的 UUID 格式
+    // 如果 LLM 返回的 id 不是 UUID 格式，则生成新的 UUID
+    const validDishId = ensureValidUUID(dishData.id);
+    
+    // 如果 id 被更改了，记录日志
+    if (validDishId !== dishData.id) {
+      console.warn(`⚠️ 菜品 ID 格式无效，已生成新 UUID: ${dishData.id} -> ${validDishId}`);
+    }
+
     // 先尝试根据 id 查找现有记录
     const existingDish = await prisma.dish.findUnique({
-      where: { id: dishData.id }
+      where: { id: validDishId }
     });
 
     if (existingDish) {
-      console.log(`📦 菜品已存在，返回现有记录: ${dishData.id} - ${dishData.name}`);
+      console.log(`📦 菜品已存在，返回现有记录: ${validDishId} - ${dishData.name}`);
       return existingDish;
     }
 
     // 如果不存在，创建新记录
     const newDish = await prisma.dish.create({
       data: {
-        id: dishData.id,
+        id: validDishId, // 使用验证后的 UUID
         name: dishData.name,
         description: dishData.description || null,
         cuisine: dishData.cuisine,
@@ -56,6 +84,7 @@ export async function saveDish(dishData: DishRecommendation) {
  * @param sessionId - 用户会话ID
  * @param dishId - 菜品ID
  * @param recipeIds - 酒品ID数组
+ * @param recipeDataMap - 可选的 Recipe 数据映射（用于自动创建不存在的 Recipe）
  * @param name - 套装名称（可选）
  * @param description - 套装描述（可选）
  * @returns 完整的套装数据（包含 Dish 和 Recipe 详情）
@@ -64,6 +93,7 @@ export async function createSavedSet(
   sessionId: string,
   dishId: string,
   recipeIds: string[],
+  recipeDataMap?: Map<string, any>, // 可选的 Recipe 数据，用于自动创建
   name?: string,
   description?: string
 ) {
@@ -77,22 +107,84 @@ export async function createSavedSet(
       throw new Error(`菜品不存在: ${dishId}`);
     }
 
-    // 2. 验证所有 recipeIds 是否存在
+    // 2. 验证所有 recipeIds 是否存在，如果不存在且提供了数据则自动创建
     if (!recipeIds || recipeIds.length === 0) {
       throw new Error('酒品ID列表不能为空');
     }
 
-    const recipes = await prisma.recipe.findMany({
+    // 先验证并规范化所有 recipeIds（确保都是有效的 UUID）
+    const normalizedRecipeIds: string[] = [];
+    const idMapping = new Map<string, string>(); // 原始ID -> 规范化ID的映射
+
+    for (const originalId of recipeIds) {
+      const validId = ensureValidUUID(originalId);
+      if (validId !== originalId) {
+        console.warn(`⚠️ 酒品 ID 格式无效，已生成新 UUID: ${originalId} -> ${validId}`);
+        idMapping.set(originalId, validId);
+      }
+      normalizedRecipeIds.push(validId);
+    }
+
+    // 使用规范化后的 IDs 查询已存在的 Recipe
+    const existingRecipes = await prisma.recipe.findMany({
       where: {
-        id: { in: recipeIds }
+        id: { in: normalizedRecipeIds }
       }
     });
 
-    if (recipes.length !== recipeIds.length) {
-      const foundIds = recipes.map(r => r.id);
-      const missingIds = recipeIds.filter(id => !foundIds.includes(id));
-      throw new Error(`部分酒品不存在: ${missingIds.join(', ')}`);
+    const existingIds = existingRecipes.map(r => r.id);
+    const missingIds = normalizedRecipeIds.filter(id => !existingIds.includes(id));
+
+    // 如果有不存在的 Recipe，且提供了数据，则自动创建
+    if (missingIds.length > 0) {
+      if (recipeDataMap) {
+        console.log(`📝 检测到 ${missingIds.length} 个不存在的 Recipe，将自动创建`);
+        for (const missingId of missingIds) {
+          // 查找对应的原始 ID（如果有映射）
+          let originalId = missingId;
+          for (const [orig, norm] of idMapping.entries()) {
+            if (norm === missingId) {
+              originalId = orig;
+              break;
+            }
+          }
+          
+          const recipeData = recipeDataMap.get(originalId) || recipeDataMap.get(missingId);
+          if (recipeData) {
+            try {
+              await prisma.recipe.create({
+                data: {
+                  id: missingId, // 使用规范化后的 UUID
+                  name: recipeData.name || '未知酒品',
+                  description: recipeData.description || null,
+                  ingredients: recipeData.ingredients || [],
+                  steps: recipeData.steps || [],
+                  difficulty: recipeData.difficulty ?? 1,
+                  estimatedTime: recipeData.estimatedTime ?? 0,
+                  source: recipeData.source || null,
+                  category: recipeData.category || null,
+                  glassType: recipeData.glassType || null,
+                  technique: recipeData.technique || null,
+                  garnish: recipeData.garnish || null,
+                  notes: recipeData.notes || null,
+                }
+              });
+              console.log(`✅ 自动创建 Recipe: ${missingId}`);
+            } catch (error) {
+              console.error(`❌ 创建 Recipe 失败: ${missingId}`, error);
+              throw new Error(`无法创建酒品记录: ${missingId}`);
+            }
+          } else {
+            throw new Error(`缺少酒品数据，无法创建: ${missingId}`);
+          }
+        }
+      } else {
+        throw new Error(`部分酒品不存在: ${missingIds.join(', ')}`);
+      }
     }
+
+    // 使用规范化后的 recipeIds 继续后续操作
+    const finalRecipeIds = normalizedRecipeIds;
 
     // 3. 检查是否已存在相同的套装（根据 sessionId 和 dishId）
     const existingSet = await prisma.savedSet.findUnique({
@@ -120,9 +212,9 @@ export async function createSavedSet(
         }
       });
 
-      // 批量创建 SavedSetRecipe 关联记录
+      // 批量创建 SavedSetRecipe 关联记录（使用规范化后的 recipeIds）
       await tx.savedSetRecipe.createMany({
-        data: recipeIds.map(recipeId => ({
+        data: finalRecipeIds.map(recipeId => ({
           savedSetId: newSet.id,
           recipeId,
         })),

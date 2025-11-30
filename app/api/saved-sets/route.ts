@@ -18,6 +18,11 @@ import {
 import type { DishRecommendation } from '../../types/foodPairing';
 
 /**
+ * UUID 格式验证正则表达式
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * 创建套装收藏
  * POST /api/saved-sets
  * 
@@ -92,7 +97,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { dish, recipeIds, name, description } = body || {};
+    const { dish, recipeIds, recipeDataMap, name, description } = body || {};
 
     // 2. 验证必需参数
     if (!dish || typeof dish !== 'object') {
@@ -116,6 +121,11 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // 验证 dish.id 是否为有效的 UUID 格式（如果不是，saveDish 会自动生成新的 UUID）
+    if (!UUID_REGEX.test(dish.id)) {
+      console.warn(`⚠️ 菜品 ID 格式无效，将在保存时自动生成新 UUID: ${dish.id}`);
     }
 
     if (!dish.name || typeof dish.name !== 'string' || dish.name.trim().length === 0) {
@@ -208,6 +218,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 验证 recipeIds 是否为有效的 UUID 格式（如果不是，服务层会自动生成新的 UUID）
+    const invalidIds = recipeIds.filter(id => !UUID_REGEX.test(id));
+    if (invalidIds.length > 0) {
+      console.warn(`⚠️ 检测到 ${invalidIds.length} 个无效的 UUID 格式，将在保存时自动生成新 UUID:`, invalidIds);
+    }
+
     // 验证 recipeIds 数组去重（防止重复添加同一酒品）
     const uniqueRecipeIds = [...new Set(recipeIds)];
     if (uniqueRecipeIds.length !== recipeIds.length) {
@@ -244,11 +260,20 @@ export async function POST(request: NextRequest) {
     // 5. 保存或获取 Dish 记录
     const dishRecord = await saveDish(dish as DishRecommendation);
 
-    // 6. 创建套装收藏（使用去重后的 recipeIds）
+    // 6. 准备 Recipe 数据映射（如果提供了 recipeDataMap）
+    // recipeDataMap 是从前端传来的对象，格式: { [recipeId]: recipeData }
+    let recipeDataMapInstance: Map<string, any> | undefined;
+    if (recipeDataMap && typeof recipeDataMap === 'object' && !Array.isArray(recipeDataMap)) {
+      recipeDataMapInstance = new Map(Object.entries(recipeDataMap));
+      console.log(`📝 收到 Recipe 数据映射，包含 ${recipeDataMapInstance.size} 个 Recipe`);
+    }
+
+    // 7. 创建套装收藏（使用去重后的 recipeIds）
     const savedSet = await createSavedSet(
       sessionId,
       dishRecord.id,
       uniqueRecipeIds,
+      recipeDataMapInstance,
       name,
       description
     );
@@ -576,8 +601,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 验证 savedSetId 格式（UUID格式）
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(savedSetId)) {
+    if (!UUID_REGEX.test(savedSetId)) {
       return NextResponse.json(
         {
           success: false,

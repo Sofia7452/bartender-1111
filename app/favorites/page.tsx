@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { RecipeCard } from '../components/forms/RecipeCard';
+import { SavedSetCard } from '../components/forms/SavedSetCard';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
 
 interface Recipe {
   id: string;
@@ -40,28 +42,107 @@ interface FavoritesResponse {
   };
 }
 
+interface SavedSetItem {
+  id: string;
+  sessionId: string;
+  name: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  dish: {
+    id: string;
+    name: string;
+    description: string | null;
+    cuisine: string;
+    requiredIngredients: string[];
+    cookingTime: number;
+    difficulty: number;
+    steps: string[];
+    source: string | null;
+    tags: string[] | null;
+  };
+  recipes: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    ingredients: string[];
+    steps: string[];
+    difficulty: number;
+    estimatedTime: number;
+    category: string | null;
+    glassType: string | null;
+    technique: string | null;
+    garnish: string | null;
+  }>;
+}
+
+interface SavedSetsResponse {
+  success: boolean;
+  savedSets: SavedSetItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+type FilterTag = 'all' | 'recipes' | 'sets';
+
 export default function FavoritesPage() {
   // 状态管理
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [savedSets, setSavedSets] = useState<SavedSetItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<FavoritesResponse['pagination'] | null>(null);
+  const [filterTag, setFilterTag] = useState<FilterTag>('all');
+  const [favoritesPagination, setFavoritesPagination] = useState<FavoritesResponse['pagination'] | null>(null);
+  const [setsPagination, setSetsPagination] = useState<SavedSetsResponse['pagination'] | null>(null);
 
-  // 获取收藏列表
+  // 获取单独收藏的酒品列表
   const fetchFavorites = async (page: number = 1, limit: number = 20) => {
-    setLoading(true);
-    setError(null);
-
     try {
       const response = await fetch(`/api/favorites?page=${page}&limit=${limit}`);
       const data: FavoritesResponse = await response.json();
 
       if (data.success) {
         setFavorites(data.favorites);
-        setPagination(data.pagination);
+        setFavoritesPagination(data.pagination);
       } else {
-        setError('获取收藏列表失败，请稍后重试');
+        console.error('获取收藏列表失败:', data.error);
       }
+    } catch (err) {
+      console.error('获取收藏列表失败:', err);
+    }
+  };
+
+  // 获取套装收藏列表
+  const fetchSavedSets = async (page: number = 1, limit: number = 20) => {
+    try {
+      const response = await fetch(`/api/saved-sets?page=${page}&limit=${limit}`);
+      const data: SavedSetsResponse = await response.json();
+
+      if (data.success) {
+        setSavedSets(data.savedSets);
+        setSetsPagination(data.pagination);
+      } else {
+        console.error('获取套装列表失败:', data.error);
+      }
+    } catch (err) {
+      console.error('获取套装列表失败:', err);
+    }
+  };
+
+  // 获取所有收藏
+  const fetchAllFavorites = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await Promise.all([
+        fetchFavorites(1, 100), // 获取足够多的单独收藏
+        fetchSavedSets(1, 100), // 获取足够多的套装收藏
+      ]);
     } catch (err) {
       console.error('获取收藏列表失败:', err);
       setError('网络错误，请检查连接');
@@ -70,9 +151,9 @@ export default function FavoritesPage() {
     }
   };
 
-  // 组件挂载时获取收藏列表
+  // 组件挂载时获取所有收藏
   useEffect(() => {
-    fetchFavorites();
+    fetchAllFavorites();
   }, []);
 
   // 处理取消收藏
@@ -88,14 +169,44 @@ export default function FavoritesPage() {
     );
 
     // 更新总数
-    if (pagination) {
-      setPagination({
-        ...pagination,
-        total: Math.max(0, pagination.total - 1),
-        pages: Math.ceil(Math.max(0, pagination.total - 1) / pagination.limit)
+    if (favoritesPagination) {
+      setFavoritesPagination({
+        ...favoritesPagination,
+        total: Math.max(0, favoritesPagination.total - 1),
+        pages: Math.ceil(Math.max(0, favoritesPagination.total - 1) / favoritesPagination.limit)
       });
     }
   };
+
+  // 处理删除套装
+  const handleDeleteSet = (savedSetId: string) => {
+    setSavedSets(prevSets => prevSets.filter(set => set.id !== savedSetId));
+    
+    // 更新总数
+    if (setsPagination) {
+      setSetsPagination({
+        ...setsPagination,
+        total: Math.max(0, setsPagination.total - 1),
+        totalPages: Math.ceil(Math.max(0, setsPagination.total - 1) / setsPagination.limit)
+      });
+    }
+  };
+
+  // 根据筛选标签过滤数据
+  const getFilteredData = () => {
+    switch (filterTag) {
+      case 'recipes':
+        return { favorites, savedSets: [] };
+      case 'sets':
+        return { favorites: [], savedSets };
+      case 'all':
+      default:
+        return { favorites, savedSets };
+    }
+  };
+
+  const { favorites: filteredFavorites, savedSets: filteredSets } = getFilteredData();
+  const totalCount = (favoritesPagination?.total || 0) + (setsPagination?.total || 0);
 
   // 处理查看详情
   const handleViewDetails = (recipeId: string) => {
@@ -109,8 +220,35 @@ export default function FavoritesPage() {
         {/* 页面标题 */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">我的收藏</h1>
-          <p className="text-gray-600">您收藏的所有鸡尾酒配方</p>
+          <p className="text-gray-600">您收藏的所有鸡尾酒配方和搭配套装</p>
         </div>
+
+        {/* 分类筛选 */}
+        {!loading && (favorites.length > 0 || savedSets.length > 0) && (
+          <div className="mb-6 flex flex-wrap gap-3">
+            <Button
+              onClick={() => setFilterTag('all')}
+              variant={filterTag === 'all' ? 'primary' : 'outline'}
+              size="sm"
+            >
+              全部 ({totalCount})
+            </Button>
+            <Button
+              onClick={() => setFilterTag('recipes')}
+              variant={filterTag === 'recipes' ? 'primary' : 'outline'}
+              size="sm"
+            >
+              🍷 只有酒品 ({favoritesPagination?.total || 0})
+            </Button>
+            <Button
+              onClick={() => setFilterTag('sets')}
+              variant={filterTag === 'sets' ? 'primary' : 'outline'}
+              size="sm"
+            >
+              🍽️ 菜酒品套装 ({setsPagination?.total || 0})
+            </Button>
+          </div>
+        )}
 
         {/* 加载状态 */}
         {loading && (
@@ -129,7 +267,7 @@ export default function FavoritesPage() {
               <div className="text-center">
                 <p className="text-red-600 mb-4">{error}</p>
                 <Button
-                  onClick={() => fetchFavorites()}
+                  onClick={() => fetchAllFavorites()}
                   variant="outline"
                 >
                   重试
@@ -140,7 +278,7 @@ export default function FavoritesPage() {
         )}
 
         {/* 空状态 */}
-        {!loading && !error && favorites.length === 0 && (
+        {!loading && !error && filteredFavorites.length === 0 && filteredSets.length === 0 && (
           <Card>
             <CardContent className="py-16">
               <div className="text-center">
@@ -175,54 +313,59 @@ export default function FavoritesPage() {
         )}
 
         {/* 收藏列表 */}
-        {!loading && !error && favorites.length > 0 && (
+        {!loading && !error && (filteredFavorites.length > 0 || filteredSets.length > 0) && (
           <>
             {/* 收藏统计 */}
             <div className="mb-6">
               <p className="text-gray-600">
-                共 {pagination?.total || favorites.length} 个收藏
+                共 {totalCount} 个收藏
+                {filterTag === 'recipes' && `（${favoritesPagination?.total || 0} 个酒品）`}
+                {filterTag === 'sets' && `（${setsPagination?.total || 0} 个套装）`}
+                {filterTag === 'all' && `（${favoritesPagination?.total || 0} 个酒品 + ${setsPagination?.total || 0} 个套装）`}
               </p>
             </div>
 
-            {/* 收藏网格 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {favorites.map((favorite) => {
-                if (!favorite.recipe) {
-                  return null;
-                }
+            {/* 单独收藏的酒品 */}
+            {filteredFavorites.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  🍷 单独收藏的酒品
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredFavorites.map((favorite) => {
+                    if (!favorite.recipe) {
+                      return null;
+                    }
 
-                return (
-                  <RecipeCard
-                    key={favorite.id}
-                    recipe={favorite.recipe}
-                    isFavorited={true}
-                    onFavorite={handleUnfavorite}
-                    onViewDetails={handleViewDetails}
-                  />
-                );
-              })}
-            </div>
+                    return (
+                      <RecipeCard
+                        key={favorite.id}
+                        recipe={favorite.recipe}
+                        isFavorited={true}
+                        onFavorite={handleUnfavorite}
+                        onViewDetails={handleViewDetails}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-            {/* 分页信息（如果需要） */}
-            {pagination && pagination.pages > 1 && (
-              <div className="flex justify-center items-center space-x-4 mt-8">
-                <Button
-                  onClick={() => fetchFavorites(pagination.page - 1)}
-                  disabled={pagination.page <= 1}
-                  variant="outline"
-                >
-                  上一页
-                </Button>
-                <span className="text-gray-600">
-                  第 {pagination.page} 页 / 共 {pagination.pages} 页
-                </span>
-                <Button
-                  onClick={() => fetchFavorites(pagination.page + 1)}
-                  disabled={pagination.page >= pagination.pages}
-                  variant="outline"
-                >
-                  下一页
-                </Button>
+            {/* 套装收藏 */}
+            {filteredSets.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  🍽️ 菜酒品搭配套装
+                </h2>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {filteredSets.map((savedSet) => (
+                    <SavedSetCard
+                      key={savedSet.id}
+                      savedSet={savedSet}
+                      onDelete={handleDeleteSet}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </>

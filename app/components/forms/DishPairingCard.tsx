@@ -61,59 +61,30 @@ export const DishPairingCard: React.FC<DishPairingCardProps> = ({
     setSaveError(null);
 
     try {
-      // 步骤1：先确保所有 beverage 都已作为 Recipe 存在于数据库中
-      // 将 BeverageRecommendation 转换为 Recipe 格式并创建 Recipe 记录
+      // 准备 Recipe 数据映射（用于自动创建不存在的 Recipe）
+      const recipeDataMap: Record<string, any> = {};
       const recipeIds: string[] = [];
 
-      for (const beverage of relatedBeverages) {
-        try {
-          // 先尝试创建 Recipe（如果已存在会返回 409，我们可以忽略）
-          // 使用 /api/favorites 来创建 Recipe，即使已收藏也没关系
-          const recipeResponse = await fetch('/api/favorites', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              recipeId: beverage.id,
-              recipeData: {
-                id: beverage.id,
-                name: beverage.name,
-                description: beverage.description || null,
-                ingredients: beverage.ingredients,
-                steps: beverage.steps,
-                difficulty: beverage.difficulty,
-                estimatedTime: beverage.estimatedTime,
-                source: beverage.source || null,
-                category: beverage.category || null,
-                glassType: beverage.glassType || null,
-                technique: beverage.technique || null,
-                garnish: beverage.garnish || null,
-                notes: null,
-              },
-            }),
-          });
+      relatedBeverages.forEach((beverage) => {
+        recipeIds.push(beverage.id);
+        recipeDataMap[beverage.id] = {
+          id: beverage.id,
+          name: beverage.name,
+          description: beverage.description || null,
+          ingredients: beverage.ingredients,
+          steps: beverage.steps,
+          difficulty: beverage.difficulty,
+          estimatedTime: beverage.estimatedTime,
+          source: beverage.source || null,
+          category: beverage.category || null,
+          glassType: beverage.glassType || null,
+          technique: beverage.technique || null,
+          garnish: beverage.garnish || null,
+          notes: null,
+        };
+      });
 
-          // 无论成功（200）还是已存在（409），都说明 Recipe 已存在
-          if (recipeResponse.ok || recipeResponse.status === 409) {
-            recipeIds.push(beverage.id);
-          } else {
-            const recipeData = await recipeResponse.json();
-            console.warn(`⚠️ 创建 Recipe 失败: ${beverage.id}`, recipeData.error);
-            // 继续处理其他 beverage
-          }
-        } catch (error) {
-          console.error(`❌ 处理 beverage ${beverage.id} 失败:`, error);
-          // 继续处理其他 beverage
-        }
-      }
-
-      if (recipeIds.length === 0) {
-        setSaveError('无法创建酒品记录，请重试');
-        return;
-      }
-
-      // 步骤2：创建套装收藏
+      // 直接创建套装收藏，API 会自动创建不存在的 Recipe
       const response = await fetch('/api/saved-sets', {
         method: 'POST',
         headers: {
@@ -122,6 +93,7 @@ export const DishPairingCard: React.FC<DishPairingCardProps> = ({
         body: JSON.stringify({
           dish: dish,
           recipeIds: recipeIds,
+          recipeDataMap: recipeDataMap, // 传递 Recipe 数据，用于自动创建
           name: `${dish.name} 搭配套装`,
           description: `包含 ${relatedBeverages.length} 个推荐酒品的搭配套装`,
         }),

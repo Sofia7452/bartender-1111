@@ -58,10 +58,15 @@ export async function POST(request: NextRequest) {
     });
 
     // 5. 如果Recipe不存在，但提供了recipeData，则创建Recipe记录
+    // 注意：Recipe 是共享资源，可以被两类收藏关系使用：
+    // - UserFavorite（单独收藏，通过此 API）
+    // - SavedSetRecipe（套装收藏中的酒品，通过 /api/saved-sets）
+    // 因此，创建 Recipe 是合理的，它会被两类关系共享使用
     if (!recipe && recipeData) {
       console.log(`📝 配方不存在，使用传入的Recipe数据创建新配方，recipeId: ${recipeId}`);
       try {
         // 创建Recipe记录（使用传入的recipeId和recipeData）
+        // 这个 Recipe 可以被单独收藏（UserFavorite）和套装收藏（SavedSetRecipe）共享使用
         recipe = await prisma.recipe.create({
           data: {
             id: recipeId, // 使用传入的recipeId
