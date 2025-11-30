@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from './components/ui/Card';
 import { IngredientInput } from './components/forms/IngredientInput';
 import { Button } from './components/ui/Button';
 import { RecipeCard } from './components/forms/RecipeCard';
+import { DishPairingCard } from './components/forms/DishPairingCard';
 import { Spinner } from './components/ui/Spinner';
 import { Input } from './components/ui/Input';
 import { Badge } from './components/ui/Badge';
@@ -432,157 +433,44 @@ export default function Home() {
               </div>
             )}
 
-            {/* 菜品推荐列表 */}
+            {/* 菜品与酒品搭配卡片（一对多模式） */}
             {pairingResult.dishes.length > 0 && (
               <div className="space-y-6">
                 <h2 className="text-2xl font-bold text-gray-900 text-center">
-                  🍽️ 为您推荐的菜品
+                  🍽️ 为您推荐的菜品搭配
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {pairingResult.dishes.map((dish) => (
-                    <Card key={dish.id} className="hover:shadow-lg transition-shadow">
-                      <CardHeader>
-                        <CardTitle className="text-lg">{dish.name}</CardTitle>
-                        <p className="text-sm text-gray-600">{dish.description}</p>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div>
-                            <span className="text-xs font-medium text-gray-500">菜系：</span>
-                            <Badge variant="default" size="sm" className="ml-2">
-                              {dish.cuisine}
-                            </Badge>
-                          </div>
-                          <div>
-                            <span className="text-xs font-medium text-gray-500">所需食材：</span>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {dish.requiredIngredients.slice(0, 3).map((ing, idx) => (
-                                <Badge key={idx} variant="default" size="sm">
-                                  {ing}
-                                </Badge>
-                              ))}
-                              {dish.requiredIngredients.length > 3 && (
-                                <Badge variant="default" size="sm">
-                                  +{dish.requiredIngredients.length - 3} 更多
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2 text-sm">
-                            <span className="text-gray-600">
-                              ⏱️ {dish.cookingTime} 分钟
-                            </span>
-                            <span className="text-gray-600">
-                              📊 难度: {dish.difficulty}/5
-                            </span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
+                  {pairingResult.dishes.map((dish) => {
+                    // 获取该菜品对应的酒品（根据 pairingReasons）
+                    let relatedBeverages = pairingResult.beverages.filter((beverage) =>
+                      pairingResult.pairingReasons.some(
+                        (reason) => reason.dishId === dish.id && reason.beverageId === beverage.id
+                      )
+                    );
 
-            {/* 酒品推荐列表 */}
-            {pairingResult.beverages.length > 0 && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-bold text-gray-900 text-center">
-                  🍷 为您推荐的酒品
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {pairingResult.beverages.map((beverage) => (
-                    <Card key={beverage.id} className="hover:shadow-lg transition-shadow">
-                      <CardHeader>
-                        <CardTitle className="text-lg">{beverage.name}</CardTitle>
-                        <p className="text-sm text-gray-600">{beverage.description}</p>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div className="flex flex-wrap gap-2">
-                            {beverage.category && (
-                              <Badge variant="default" size="sm">
-                                {beverage.category}
-                              </Badge>
-                            )}
-                            {beverage.glassType && (
-                              <Badge variant="default" size="sm">
-                                {beverage.glassType}
-                              </Badge>
-                            )}
-                            {beverage.technique && (
-                              <Badge variant="default" size="sm">
-                                {beverage.technique}
-                              </Badge>
-                            )}
-                          </div>
-                          <div>
-                            <span className="text-xs font-medium text-gray-500">原料：</span>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {beverage.ingredients.slice(0, 3).map((ing, idx) => (
-                                <Badge key={idx} variant="default" size="sm">
-                                  {ing}
-                                </Badge>
-                              ))}
-                              {beverage.ingredients.length > 3 && (
-                                <Badge variant="default" size="sm">
-                                  +{beverage.ingredients.length - 3} 更多
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2 text-sm">
-                            <span className="text-gray-600">
-                              ⏱️ {beverage.estimatedTime} 分钟
-                            </span>
-                            <span className="text-gray-600">
-                              📊 难度: {beverage.difficulty}/5
-                            </span>
-                          </div>
-                          {beverage.garnish && (
-                            <div className="text-sm text-gray-600">
-                              🎨 装饰: {beverage.garnish}
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
+                    // 如果没有找到关联的酒品，但有可用的酒品，则显示所有酒品
+                    // 这可能是 pairingReasons 数据不完整的情况
+                    if (relatedBeverages.length === 0 && pairingResult.beverages.length > 0) {
+                      console.warn(`⚠️ 菜品 ${dish.id} (${dish.name}) 没有找到关联的酒品，显示所有可用酒品`);
+                      relatedBeverages = pairingResult.beverages;
+                    }
 
-            {/* 搭配理由 */}
-            {pairingResult.pairingReasons.length > 0 && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-bold text-gray-900 text-center">
-                  💡 搭配理由
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl mx-auto">
-                  {pairingResult.pairingReasons.map((reason) => {
-                    const dish = pairingResult.dishes.find((d) => d.id === reason.dishId);
-                    const beverage = pairingResult.beverages.find((b) => b.id === reason.beverageId);
+                    // 获取该菜品相关的搭配理由
+                    const relatedReasons = pairingResult.pairingReasons.filter(
+                      (reason) => reason.dishId === dish.id
+                    );
+
                     return (
-                      <Card key={reason.id} className="bg-gradient-to-br from-blue-50 to-purple-50">
-                        <CardHeader>
-                          <CardTitle className="text-lg">
-                            {dish?.name || '未知菜品'} × {beverage?.name || '未知酒品'}
-                          </CardTitle>
-                          {reason.pairingType && (
-                            <Badge variant="info" size="sm" className="w-fit">
-                              {reason.pairingType}
-                            </Badge>
-                          )}
-                          {reason.score && (
-                            <div className="text-sm text-gray-600">
-                              搭配评分: {reason.score}/10
-                            </div>
-                          )}
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-gray-700 leading-relaxed">{reason.reason}</p>
-                        </CardContent>
-                      </Card>
+                      <DishPairingCard
+                        key={dish.id}
+                        dish={dish}
+                        beverages={relatedBeverages}
+                        pairingReasons={relatedReasons}
+                        onSaved={(savedSetId) => {
+                          console.log('套装已收藏:', savedSetId);
+                          // 可以在这里添加成功提示，比如使用 toast
+                        }}
+                      />
                     );
                   })}
                 </div>
