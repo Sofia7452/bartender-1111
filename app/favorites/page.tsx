@@ -33,13 +33,15 @@ interface FavoriteItem {
 
 interface FavoritesResponse {
   success: boolean;
-  favorites: FavoriteItem[];
-  pagination: {
+  favorites?: FavoriteItem[];
+  pagination?: {
     page: number;
     limit: number;
     total: number;
     pages: number;
   };
+  error?: string;
+  details?: string;
 }
 
 interface SavedSetItem {
@@ -78,13 +80,15 @@ interface SavedSetItem {
 
 interface SavedSetsResponse {
   success: boolean;
-  savedSets: SavedSetItem[];
-  pagination: {
+  savedSets?: SavedSetItem[];
+  pagination?: {
     page: number;
     limit: number;
     total: number;
     totalPages: number;
   };
+  error?: string;
+  details?: string;
 }
 
 type FilterTag = 'all' | 'recipes' | 'sets';
@@ -105,11 +109,13 @@ export default function FavoritesPage() {
       const response = await fetch(`/api/favorites?page=${page}&limit=${limit}`);
       const data: FavoritesResponse = await response.json();
 
-      if (data.success) {
+      if (data.success && data.favorites && data.pagination) {
         setFavorites(data.favorites);
         setFavoritesPagination(data.pagination);
       } else {
-        console.error('获取收藏列表失败:', data.error);
+        const errorMsg = data.error || '获取收藏列表失败';
+        console.error('获取收藏列表失败:', errorMsg);
+        setError(errorMsg);
       }
     } catch (err) {
       console.error('获取收藏列表失败:', err);
@@ -122,11 +128,13 @@ export default function FavoritesPage() {
       const response = await fetch(`/api/saved-sets?page=${page}&limit=${limit}`);
       const data: SavedSetsResponse = await response.json();
 
-      if (data.success) {
+      if (data.success && data.savedSets && data.pagination) {
         setSavedSets(data.savedSets);
         setSetsPagination(data.pagination);
       } else {
-        console.error('获取套装列表失败:', data.error);
+        const errorMsg = data.error || '获取套装列表失败';
+        console.error('获取套装列表失败:', errorMsg);
+        // 不设置 error 状态，因为这是后台获取，不影响主界面
       }
     } catch (err) {
       console.error('获取套装列表失败:', err);
@@ -319,9 +327,9 @@ export default function FavoritesPage() {
             <div className="mb-6">
               <p className="text-gray-600">
                 共 {totalCount} 个收藏
-                {filterTag === 'recipes' && `（${favoritesPagination?.total || 0} 个酒品）`}
-                {filterTag === 'sets' && `（${setsPagination?.total || 0} 个套装）`}
-                {filterTag === 'all' && `（${favoritesPagination?.total || 0} 个酒品 + ${setsPagination?.total || 0} 个套装）`}
+                {filterTag === 'recipes' && `（${favoritesPagination?.total ?? 0} 个酒品）`}
+                {filterTag === 'sets' && `（${setsPagination?.total ?? 0} 个套装）`}
+                {filterTag === 'all' && `（${favoritesPagination?.total ?? 0} 个酒品 + ${setsPagination?.total ?? 0} 个套装）`}
               </p>
             </div>
 
