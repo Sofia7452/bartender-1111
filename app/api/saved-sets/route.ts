@@ -21,12 +21,58 @@ import type { DishRecommendation } from '../../types/foodPairing';
  * 创建套装收藏
  * POST /api/saved-sets
  * 
- * 请求体：
+ * @description 将一整套菜品和酒品搭配作为一个集合进行收藏
+ * 
+ * @param request - Next.js 请求对象
+ * @returns NextResponse
+ * 
+ * @requestBody
  * {
  *   dish: DishRecommendation,    // 菜品数据（必需）
- *   recipeIds: string[],          // 酒品ID数组（必需）
- *   name?: string,                // 套装名称（可选）
+ *   recipeIds: string[],          // 酒品ID数组（必需，至少1个）
+ *   name?: string,                // 套装名称（可选，最大255字符）
  *   description?: string          // 套装描述（可选）
+ * }
+ * 
+ * @response 200 - 创建成功
+ * {
+ *   success: true,
+ *   savedSet: {
+ *     id: string,
+ *     sessionId: string,
+ *     name: string | null,
+ *     description: string | null,
+ *     createdAt: Date,
+ *     updatedAt: Date,
+ *     dish: DishInSet,
+ *     recipes: RecipeInSet[]
+ *   }
+ * }
+ * 
+ * @response 400 - 请求参数错误
+ * {
+ *   success: false,
+ *   error: string,
+ *   details?: string
+ * }
+ * 
+ * @response 404 - 数据不存在（菜品或酒品不存在）
+ * {
+ *   success: false,
+ *   error: string
+ * }
+ * 
+ * @response 409 - 重复收藏（同一用户同一菜品已创建套装）
+ * {
+ *   success: false,
+ *   error: string
+ * }
+ * 
+ * @response 500 - 服务器错误
+ * {
+ *   success: false,
+ *   error: string,
+ *   details?: string  // 仅在开发环境返回
  * }
  */
 export async function POST(request: NextRequest) {
@@ -60,6 +106,85 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 验证 dish 对象的必需字段
+    if (!dish.id || typeof dish.id !== 'string' || dish.id.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '菜品ID不能为空',
+          details: 'dish.id 必须是有效的字符串',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!dish.name || typeof dish.name !== 'string' || dish.name.trim().length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '菜品名称不能为空',
+          details: 'dish.name 必须是有效的非空字符串',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!dish.cuisine || typeof dish.cuisine !== 'string' || dish.cuisine.trim().length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '菜系不能为空',
+          details: 'dish.cuisine 必须是有效的非空字符串',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!Array.isArray(dish.requiredIngredients)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '所需食材列表格式错误',
+          details: 'dish.requiredIngredients 必须是数组类型',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!Array.isArray(dish.steps)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '烹饪步骤列表格式错误',
+          details: 'dish.steps 必须是数组类型',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (typeof dish.cookingTime !== 'number' || dish.cookingTime < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '烹饪时间格式错误',
+          details: 'dish.cookingTime 必须是非负数字',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (typeof dish.difficulty !== 'number' || dish.difficulty < 1 || dish.difficulty > 5) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '难度等级格式错误',
+          details: 'dish.difficulty 必须是1-5之间的数字',
+        },
+        { status: 400 }
+      );
+    }
+
+    // 验证 recipeIds
     if (!recipeIds || !Array.isArray(recipeIds) || recipeIds.length === 0) {
       return NextResponse.json(
         {
@@ -83,6 +208,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 验证 recipeIds 数组去重（防止重复添加同一酒品）
+    const uniqueRecipeIds = [...new Set(recipeIds)];
+    if (uniqueRecipeIds.length !== recipeIds.length) {
+      console.warn(`⚠️ 检测到重复的酒品ID，已自动去重`);
+    }
+
+    // 验证可选字段
+    if (name !== undefined && (typeof name !== 'string' || name.length > 255)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '套装名称格式错误',
+          details: 'name 必须是字符串类型，且长度不超过255字符',
+        },
+        { status: 400 }
+      );
+    }
+
     console.log(`📦 收到套装收藏请求，dishId: ${dish.id}, recipeIds: ${recipeIds.length} 个`);
 
     // 3. 获取或生成 sessionId
@@ -101,11 +244,11 @@ export async function POST(request: NextRequest) {
     // 5. 保存或获取 Dish 记录
     const dishRecord = await saveDish(dish as DishRecommendation);
 
-    // 6. 创建套装收藏
+    // 6. 创建套装收藏（使用去重后的 recipeIds）
     const savedSet = await createSavedSet(
       sessionId,
       dishRecord.id,
-      recipeIds,
+      uniqueRecipeIds,
       name,
       description
     );
@@ -213,6 +356,40 @@ export async function POST(request: NextRequest) {
 /**
  * 获取套装列表
  * GET /api/saved-sets?page=1&limit=10
+ * 
+ * @description 获取当前用户的所有套装收藏列表，支持分页
+ * 
+ * @param request - Next.js 请求对象
+ * @returns NextResponse
+ * 
+ * @queryParams
+ * - page: number (可选，默认1) - 页码，从1开始
+ * - limit: number (可选，默认10，最大50) - 每页数量
+ * 
+ * @response 200 - 查询成功
+ * {
+ *   success: true,
+ *   savedSets: SavedSetWithRelations[],
+ *   pagination: {
+ *     page: number,
+ *     limit: number,
+ *     total: number,
+ *     totalPages: number
+ *   }
+ * }
+ * 
+ * @response 400 - 请求参数错误（页码无效）
+ * {
+ *   success: false,
+ *   error: string
+ * }
+ * 
+ * @response 500 - 服务器错误
+ * {
+ *   success: false,
+ *   error: string,
+ *   details?: string  // 仅在开发环境返回
+ * }
  */
 export async function GET(request: NextRequest) {
   try {
@@ -325,9 +502,46 @@ export async function GET(request: NextRequest) {
  * 删除套装收藏
  * DELETE /api/saved-sets
  * 
- * 请求体：
+ * @description 删除指定的套装收藏，只能删除自己的套装
+ * 
+ * @param request - Next.js 请求对象
+ * @returns NextResponse
+ * 
+ * @requestBody
  * {
- *   savedSetId: string  // 套装ID（必需）
+ *   savedSetId: string  // 套装ID（必需，UUID格式）
+ * }
+ * 
+ * @response 200 - 删除成功
+ * {
+ *   success: true,
+ *   message: string
+ * }
+ * 
+ * @response 400 - 请求参数错误
+ * {
+ *   success: false,
+ *   error: string,
+ *   details?: string
+ * }
+ * 
+ * @response 403 - 权限不足（无权删除此套装）
+ * {
+ *   success: false,
+ *   error: string
+ * }
+ * 
+ * @response 404 - 套装不存在
+ * {
+ *   success: false,
+ *   error: string
+ * }
+ * 
+ * @response 500 - 服务器错误
+ * {
+ *   success: false,
+ *   error: string,
+ *   details?: string  // 仅在开发环境返回
  * }
  */
 export async function DELETE(request: NextRequest) {
@@ -356,6 +570,19 @@ export async function DELETE(request: NextRequest) {
           success: false,
           error: '套装ID不能为空',
           details: '请确保请求体包含有效的 savedSetId 字段（字符串类型）',
+        },
+        { status: 400 }
+      );
+    }
+
+    // 验证 savedSetId 格式（UUID格式）
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(savedSetId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '套装ID格式错误',
+          details: 'savedSetId 必须是有效的UUID格式',
         },
         { status: 400 }
       );

@@ -153,9 +153,9 @@ SavedSet (套装)
 
 ---
 
-### 4. [ ] API 接口完善与错误处理 (API Enhancement & Error Handling)
+### 4. [x] API 接口完善与错误处理 (API Enhancement & Error Handling)
 
-#### 4.1 [ ] 完善 API 错误处理
+#### 4.1 [x] 完善 API 错误处理
 - 在 `POST /api/saved-sets` 中添加完整的错误处理：
   - 请求体验证错误（400）
   - Dish 或 Recipe 不存在错误（404）
@@ -164,21 +164,21 @@ SavedSet (套装)
 - 在 `GET /api/saved-sets` 中添加错误处理
 - 在 `DELETE /api/saved-sets` 中添加权限验证和错误处理
 
-#### 4.2 [ ] 添加 API 文档注释
+#### 4.2 [x] 添加 API 文档注释
 - 为所有 API 端点添加详细的 JSDoc 注释
 - 说明请求参数、响应格式、错误码等
 - 添加使用示例
 
-#### 4.3 [ ] 实现数据验证逻辑
+#### 4.3 [x] 实现数据验证逻辑
 - 验证 `recipeIds` 数组不为空
 - 验证所有 `recipeIds` 对应的 Recipe 记录存在
 - 验证 `dish` 数据的完整性和有效性
 
 ---
 
-### 5. [ ] 基本功能验证 (Basic Functionality Validation Plan)
+### 5. [x] 基本功能验证 (Basic Functionality Validation Plan)
 
-#### 5.1 [ ] 设计测试场景
+#### 5.1 [x] 设计测试场景
 - 场景 1：创建新的套装收藏（包含一个 Dish 和多个 Recipe）
 - 场景 2：查询用户的套装列表
 - 场景 3：删除套装收藏
@@ -186,12 +186,12 @@ SavedSet (套装)
 - 场景 5：验证同一用户同一 Dish 不能创建重复套装
 - 场景 6：验证删除套装时级联删除关联的 SavedSetRecipe 记录
 
-#### 5.2 [ ] 执行手动测试
+#### 5.2 [ ] 执行手动测试（待用户执行）
 - 使用 Postman 或 curl 测试所有 API 端点
 - 验证数据库中的数据正确性
 - 验证 sessionId 的隔离性（不同用户的数据互不干扰）
 
-#### 5.3 [ ] 兼容性验证
+#### 5.3 [x] 兼容性验证（已在步骤2.3完成）
 - 确认现有的 `/api/favorites` 端点仍然正常工作
 - 确认现有的 Recipe 收藏功能不受影响
 - 确认前端页面（如 `app/favorites/page.tsx`）仍然正常显示
