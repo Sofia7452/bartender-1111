@@ -80,7 +80,7 @@ export async function dishRecommenderNode(
     return {
       agent1Output: dishes,
       metadata: {
-        ...state.metadata,
+        timestamp: state.metadata?.timestamp || new Date().toISOString(),
         executionTime: (state.metadata?.executionTime || 0) + executionTime,
         model: LLM_MODEL,
       },
@@ -152,7 +152,7 @@ export async function beveragePairingNode(
     return {
       agent2Output: pairingResult,
       metadata: {
-        ...state.metadata,
+        timestamp: state.metadata?.timestamp || new Date().toISOString(),
         executionTime: (state.metadata?.executionTime || 0) + executionTime,
         model: LLM_MODEL,
       },

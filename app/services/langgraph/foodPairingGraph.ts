@@ -4,7 +4,7 @@
  * 本文件定义了节点间的数据流转路径和决策点
  */
 
-import { StateGraph, END, START } from '@langchain/langgraph';
+import { StateGraph, END } from '@langchain/langgraph';
 import type { FoodPairingState } from './foodPairingState';
 import { FoodPairingStateSchema } from './foodPairingState';
 import { dishRecommenderNode, beveragePairingNode } from './foodPairingNodes';
@@ -95,28 +95,30 @@ export function buildFoodPairingGraph() {
   // 步骤 3: 设置入口点
   // 从 START 节点进入，首先执行 dish_recommender 节点
   // 使用 addEdge 而不是 setEntryPoint（LangGraph API 变更）
-  graph.addEdge(START, 'dish_recommender');
+  // START 的值是 "__start__"，直接使用字符串以绕过类型检查问题
+  graph.addEdge('__start__' as any, 'dish_recommender' as any);
 
   // 步骤 4: 添加条件边 - 从 dish_recommender 到下一个节点
   // 根据 shouldContinueToBeveragePairing 的返回值决定路由
+  // 使用类型断言以绕过 LangGraph 类型定义的问题
   graph.addConditionalEdges(
-    'dish_recommender', // 源节点
+    'dish_recommender' as any, // 源节点
     shouldContinueToBeveragePairing, // 路由函数
     {
       // 路由映射：返回值 -> 目标节点
       beverage_pairing: 'beverage_pairing', // 如果返回 'beverage_pairing'，继续到酒品搭配节点
       [END]: END, // 如果返回 END，直接结束流程
-    }
+    } as any
   );
 
   // 步骤 5: 添加条件边 - 从 beverage_pairing 到 END
   // 无论成功或失败，都结束流程
   graph.addConditionalEdges(
-    'beverage_pairing', // 源节点
+    'beverage_pairing' as any, // 源节点
     shouldFinishPairing, // 路由函数
     {
       [END]: END, // 始终返回 END
-    }
+    } as any
   );
 
   // 步骤 6: 编译图

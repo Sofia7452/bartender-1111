@@ -66,7 +66,7 @@ export async function saveDish(dishData: DishRecommendation) {
         difficulty: dishData.difficulty,
         steps: dishData.steps,
         source: dishData.source || null,
-        tags: dishData.tags || null,
+        tags: dishData.tags || undefined,
       }
     });
 
