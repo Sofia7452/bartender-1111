@@ -4,7 +4,7 @@
  * 本文件定义了节点间的数据流转路径和决策点
  */
 
-import { StateGraph, END } from '@langchain/langgraph';
+import { StateGraph, END, START } from '@langchain/langgraph';
 import type { FoodPairingState } from './foodPairingState';
 import { FoodPairingStateSchema } from './foodPairingState';
 import { dishRecommenderNode, beveragePairingNode } from './foodPairingNodes';
@@ -94,7 +94,8 @@ export function buildFoodPairingGraph() {
 
   // 步骤 3: 设置入口点
   // 从 START 节点进入，首先执行 dish_recommender 节点
-  graph.setEntryPoint('dish_recommender');
+  // 使用 addEdge 而不是 setEntryPoint（LangGraph API 变更）
+  graph.addEdge(START, 'dish_recommender');
 
   // 步骤 4: 添加条件边 - 从 dish_recommender 到下一个节点
   // 根据 shouldContinueToBeveragePairing 的返回值决定路由

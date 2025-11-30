@@ -189,7 +189,7 @@ export default function FavoritesPage() {
   // 处理删除套装
   const handleDeleteSet = (savedSetId: string) => {
     setSavedSets(prevSets => prevSets.filter(set => set.id !== savedSetId));
-    
+
     // 更新总数
     if (setsPagination) {
       setSetsPagination({
