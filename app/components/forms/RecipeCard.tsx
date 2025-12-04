@@ -177,12 +177,23 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
           </div>
         </div>
 
-        {/* 制作步骤预览 */}
+        {/* 制作步骤 */}
         <div className="mb-4">
           <h4 className="text-sm font-medium text-gray-700 mb-2">制作步骤</h4>
-          <p className="text-sm text-gray-600 line-clamp-2">
-            {recipe.steps[0] || '暂无制作步骤'}
-          </p>
+          {recipe.steps && recipe.steps.length > 0 ? (
+            <ol className="space-y-2 text-sm text-gray-600">
+              {recipe.steps.map((step, index) => (
+                <li key={index} className="flex items-center">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-medium mr-2 mt-0.5">
+                    {index + 1}
+                  </span>
+                  <span className="flex-1 line-clamp-2">{step}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-gray-500">暂无制作步骤</p>
+          )}
         </div>
       </CardContent>
 
