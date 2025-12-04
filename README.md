@@ -195,7 +195,7 @@ pnpm dev
 |--------|------|------|--------|
 | `DATABASE_URL` | PostgreSQL 数据库连接字符串 | ✅ | `postgresql://mock_user:mock_password@localhost:5432/mock_bartender?schema=public` |
 | `OPENAI_API_KEY` | OpenAI API 密钥 | ✅ | `sk-mock-openai-api-key-1234567890abcdef` |
-| `OPENAI_BASE_URL` | OpenAI API 基础 URL | ✅ | `https://openai.com/v1` |
+| `OPENAI_BASE_URL` | OpenAI API 基础 URL | ✅ | `https://openai.com` |
 | `LLM_MODEL` | 使用的 LLM 模型 | ✅ | `gpt-4` |
 
 ### Prisma 配置
