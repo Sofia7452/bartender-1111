@@ -94,7 +94,7 @@ nextjs-prisma/
 1. **克隆项目**
 
 ```bash
-git clone https://github.com/Sofia7452/bartender-1111.git
+git clone https://github.com/Sofia7452/super-bartender.git
 ```
 
 2. **安装依赖**
