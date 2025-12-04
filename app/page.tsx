@@ -47,7 +47,7 @@ export default function Home() {
   const [recommendations, setRecommendations] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ragEnabled, setRagEnabled] = useState(true);
+  const [ragEnabled, setRagEnabled] = useState(false);
   const [flowchartEnabled, setFlowchartEnabled] = useState(false);
   const [flowchartData, setFlowchartData] = useState<string | null>(null);
 
@@ -384,25 +384,13 @@ export default function Home() {
             size="lg"
             className="px-8 py-3"
           >
-            {pairingEnabled ? (
-              isFoodPairingLoading ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  正在推荐...
-                </>
-              ) : (
-                '获取搭配推荐'
-              )
-            ) : (
-              isLoading ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  正在推荐...
-                </>
-              ) : (
-                '获取推荐'
-              )
-            )}
+            {pairingEnabled
+              ? isFoodPairingLoading
+                ? '正在推荐...'
+                : '获取搭配推荐'
+              : isLoading
+                ? '正在推荐...'
+                : '获取推荐'}
           </Button>
         </div>
 
