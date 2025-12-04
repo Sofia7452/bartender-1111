@@ -64,6 +64,7 @@ export default function Home() {
   const [pairingResult, setPairingResult] = useState<CompletePairingRecommendation | null>(null); // 搭配结果
   const [isFoodPairingLoading, setIsFoodPairingLoading] = useState(false); // 加载状态
   const [foodPairingError, setFoodPairingError] = useState<string | null>(null); // 错误信息
+  const [useReAct, setUseReAct] = useState<boolean>(true); // ReAct 模式开关，默认启用
 
   const handleGetRecommendations = async () => {
     // 如果启用了搭配模式，使用新的 LangGraph API
@@ -88,6 +89,7 @@ export default function Home() {
             cuisine: cuisine || null,
             foodIngredients,
             drinkIngredients: drinkIngredients.length > 0 ? drinkIngredients : undefined,
+            useReAct: useReAct, // 传递 ReAct 模式参数
           }),
         });
 
@@ -228,41 +230,63 @@ export default function Home() {
               <CardTitle>系统设置</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-wrap gap-4">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={ragEnabled}
-                    onChange={(e) => setRagEnabled(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm">启用RAG增强</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={flowchartEnabled}
-                    onChange={(e) => setFlowchartEnabled(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm">生成流程图</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={pairingEnabled}
-                    onChange={(e) => setPairingEnabled(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm">搭配菜提供调酒</span>
-                </label>
-                <Button
-                  onClick={handleInitializeRAG}
-                  variant="outline"
-                  size="sm"
-                >
-                  初始化RAG
-                </Button>
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={ragEnabled}
+                      onChange={(e) => setRagEnabled(e.target.checked)}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">启用RAG增强</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={flowchartEnabled}
+                      onChange={(e) => setFlowchartEnabled(e.target.checked)}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">生成流程图</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={pairingEnabled}
+                      onChange={(e) => setPairingEnabled(e.target.checked)}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">搭配菜提供调酒</span>
+                  </label>
+                  <Button
+                    onClick={handleInitializeRAG}
+                    variant="outline"
+                    size="sm"
+                  >
+                    初始化RAG
+                  </Button>
+                </div>
+                {pairingEnabled && (
+                  <div className="pt-2 border-t border-gray-200">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={useReAct}
+                        onChange={(e) => setUseReAct(e.target.checked)}
+                        className="mr-2"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">启用 ReAct 模式</span>
+                        <span className="text-xs text-gray-500 mt-1">
+                          {useReAct
+                            ? '使用智能 Agent 模式，通过思考-行动-观察循环完成任务（推荐）'
+                            : '使用传统两阶段模式，先推荐菜品再推荐酒品'}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -417,6 +441,20 @@ export default function Home() {
         {/* LangGraph 搭配推荐结果 */}
         {pairingEnabled && pairingResult && (
           <div className="space-y-8">
+            {/* 模式提示 */}
+            <div className="max-w-4xl mx-auto">
+              <div className="flex items-center justify-center gap-2">
+                <Badge variant={useReAct ? 'info' : 'default'} size="sm">
+                  {useReAct ? '🤖 ReAct 模式' : '📋 传统模式'}
+                </Badge>
+                <span className="text-sm text-gray-500">
+                  {useReAct
+                    ? '使用智能 Agent 通过多轮思考完成任务'
+                    : '使用传统两阶段推荐流程'}
+                </span>
+              </div>
+            </div>
+
             {/* 整体搭配建议 */}
             {pairingResult.overallSuggestion && (
               <div className="max-w-4xl mx-auto">

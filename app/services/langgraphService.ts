@@ -22,17 +22,22 @@ const UserInputValidationSchema = z.object({
  * FoodPairingLangGraphService
  * 
  * 提供菜品与酒品搭配推荐的 LangGraph 服务
+ * 支持 ReAct 模式和传统模式
  */
 export class FoodPairingLangGraphService {
   private graph: ReturnType<typeof buildFoodPairingGraph> | null = null;
+  private useReAct: boolean;
 
   /**
    * 构造函数
    * 初始化服务，延迟构建图（首次使用时构建）
+   * 
+   * @param useReAct 是否使用 ReAct 模式，默认为 true
    */
-  constructor() {
+  constructor(useReAct: boolean = true) {
+    this.useReAct = useReAct;
     // 图将在首次使用时构建（懒加载）
-    console.log('📦 FoodPairingLangGraphService 初始化完成');
+    console.log(`📦 FoodPairingLangGraphService 初始化完成 (模式: ${useReAct ? 'ReAct' : '传统'})`);
   }
 
   /**
@@ -43,8 +48,8 @@ export class FoodPairingLangGraphService {
    */
   private buildGraph() {
     if (!this.graph) {
-      console.log('🔧 首次使用，构建 LangGraph 图...');
-      this.graph = buildFoodPairingGraph();
+      console.log(`🔧 首次使用，构建 LangGraph 图... (模式: ${this.useReAct ? 'ReAct' : '传统'})`);
+      this.graph = buildFoodPairingGraph(this.useReAct);
     }
     return this.graph;
   }

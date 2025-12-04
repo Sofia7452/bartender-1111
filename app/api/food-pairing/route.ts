@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getFoodPairingService } from '../../services/langgraphService';
+import { getFoodPairingService, FoodPairingLangGraphService } from '../../services/langgraphService';
 import type { CompletePairingRecommendation } from '../../types/foodPairing';
 
 /**
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { cuisine, foodIngredients, drinkIngredients } = body || {};
+    const { cuisine, foodIngredients, drinkIngredients, useReAct } = body || {};
 
     // 2. 验证输入参数
     if (!foodIngredients || !Array.isArray(foodIngredients) || foodIngredients.length === 0) {
@@ -69,15 +69,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 验证 useReAct 参数（如果提供）
+    const useReActMode = useReAct !== undefined ? Boolean(useReAct) : true; // 默认使用 ReAct 模式
+
     console.log('🍽️ 收到菜品与酒品搭配推荐请求');
     console.log('📥 输入参数:', {
       cuisine: cuisine || '未指定',
       foodIngredients,
       drinkIngredients: drinkIngredients || [],
+      useReAct: useReActMode,
     });
 
-    // 3. 获取服务实例
-    const service = getFoodPairingService();
+    // 3. 获取服务实例（根据 useReAct 参数选择模式）
+    const service = useReActMode 
+      ? getFoodPairingService() // 默认使用 ReAct 模式
+      : new FoodPairingLangGraphService(false); // 使用传统模式
 
     // 4. 执行 LangGraph 推荐流程
     const startTime = Date.now();

@@ -6,9 +6,9 @@
  */
 
 import { z } from 'zod';
-import type { 
-  DishRecommendation, 
-  CompletePairingRecommendation 
+import type {
+  DishRecommendation,
+  CompletePairingRecommendation
 } from '../../types/foodPairing';
 
 /**
@@ -36,6 +36,25 @@ const MetadataSchema = z.object({
 }).optional();
 
 /**
+ * ReAct Agent 状态 Schema
+ * 支持思考-行动-观察循环
+ */
+const ReActStateSchema = z.object({
+  /** 思考（Thought）：Agent 的推理过程 */
+  thought: z.string().nullable().optional(),
+  /** 行动（Action）：要执行的操作 */
+  action: z.string().nullable().optional(),
+  /** 行动输入（Action Input）：行动的参数 */
+  actionInput: z.any().nullable().optional(),
+  /** 观察（Observation）：行动的结果 */
+  observation: z.string().nullable().optional(),
+  /** ReAct 循环次数 */
+  reactIteration: z.number().default(0),
+  /** 是否完成 */
+  isFinished: z.boolean().default(false),
+}).optional();
+
+/**
  * LangGraph 状态 Schema
  * 使用 Zod 定义状态结构，确保类型安全
  */
@@ -50,6 +69,8 @@ export const FoodPairingStateSchema = z.object({
   error: z.string().nullable().optional(),
   /** 元数据 */
   metadata: MetadataSchema,
+  /** ReAct Agent 状态 */
+  reactState: ReActStateSchema,
 });
 
 /**
@@ -80,6 +101,14 @@ export function createInitialState(input: {
       timestamp: new Date().toISOString(),
       executionTime: undefined,
       model: undefined,
+    },
+    reactState: {
+      thought: null,
+      action: null,
+      actionInput: null,
+      observation: null,
+      reactIteration: 0,
+      isFinished: false,
     },
   };
 }

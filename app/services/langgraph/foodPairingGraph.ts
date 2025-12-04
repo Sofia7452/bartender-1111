@@ -8,6 +8,7 @@ import { StateGraph, END } from '@langchain/langgraph';
 import type { FoodPairingState } from './foodPairingState';
 import { FoodPairingStateSchema } from './foodPairingState';
 import { dishRecommenderNode, beveragePairingNode } from './foodPairingNodes';
+import { reactAgentNode, shouldContinueReAct } from './reactAgentNode';
 
 /**
  * 决策点 1: 验证菜品推荐结果
@@ -63,70 +64,83 @@ export function shouldFinishPairing(state: FoodPairingState): string {
 }
 
 /**
- * 构建 LangGraph 图结构
+ * 构建 LangGraph 图结构（支持 ReAct 模式）
  * 
- * 图结构：
+ * 图结构（ReAct 模式）：
+ * START → react_agent → [条件判断] → react_agent (循环) 或 END
+ * 
+ * 图结构（传统模式，保留兼容）：
  * START → dish_recommender → [条件判断] → beverage_pairing → [条件判断] → END
  * 
  * 步骤：
  * 1. 创建 StateGraph 实例
- * 2. 添加节点：dish_recommender 和 beverage_pairing
- * 3. 设置入口点：从 START 到 dish_recommender
- * 4. 添加条件边：从 dish_recommender 到 beverage_pairing 或 END
- * 5. 添加条件边：从 beverage_pairing 到 END
- * 6. 编译图
+ * 2. 添加节点：react_agent（ReAct 模式）或 dish_recommender + beverage_pairing（传统模式）
+ * 3. 设置入口点
+ * 4. 添加条件边
+ * 5. 编译图
  * 
+ * @param useReAct 是否使用 ReAct 模式，默认为 true
  * @returns 编译后的图实例
  */
-export function buildFoodPairingGraph() {
-  console.log('🔧 开始构建 LangGraph 图结构...');
+export function buildFoodPairingGraph(useReAct: boolean = true) {
+  console.log(`🔧 开始构建 LangGraph 图结构... (模式: ${useReAct ? 'ReAct' : '传统'})`);
 
   // 步骤 1: 创建状态图
-  // LangGraph 使用 StateGraph 来管理状态流转
-  // 使用 Zod Schema 定义状态结构
   const graph = new StateGraph(FoodPairingStateSchema);
 
-  // 步骤 2: 添加节点
-  // 节点 1: 菜品推荐节点
-  graph.addNode('dish_recommender', dishRecommenderNode);
-  // 节点 2: 酒品搭配节点
-  graph.addNode('beverage_pairing', beveragePairingNode);
+  if (useReAct) {
+    // ReAct 模式：使用 ReAct Agent 节点
+    // 步骤 2: 添加 ReAct Agent 节点
+    graph.addNode('react_agent', reactAgentNode);
 
-  // 步骤 3: 设置入口点
-  // 从 START 节点进入，首先执行 dish_recommender 节点
-  // 使用 addEdge 而不是 setEntryPoint（LangGraph API 变更）
-  // START 的值是 "__start__"，直接使用字符串以绕过类型检查问题
-  graph.addEdge('__start__' as any, 'dish_recommender' as any);
+    // 步骤 3: 设置入口点
+    graph.addEdge('__start__' as any, 'react_agent' as any);
 
-  // 步骤 4: 添加条件边 - 从 dish_recommender 到下一个节点
-  // 根据 shouldContinueToBeveragePairing 的返回值决定路由
-  // 使用类型断言以绕过 LangGraph 类型定义的问题
-  graph.addConditionalEdges(
-    'dish_recommender' as any, // 源节点
-    shouldContinueToBeveragePairing, // 路由函数
-    {
-      // 路由映射：返回值 -> 目标节点
-      beverage_pairing: 'beverage_pairing', // 如果返回 'beverage_pairing'，继续到酒品搭配节点
-      [END]: END, // 如果返回 END，直接结束流程
-    } as any
-  );
+    // 步骤 4: 添加条件边 - ReAct 循环
+    graph.addConditionalEdges(
+      'react_agent' as any,
+      shouldContinueReAct,
+      {
+        react_agent: 'react_agent', // 继续循环
+        [END]: END, // 完成任务
+      } as any
+    );
 
-  // 步骤 5: 添加条件边 - 从 beverage_pairing 到 END
-  // 无论成功或失败，都结束流程
-  graph.addConditionalEdges(
-    'beverage_pairing' as any, // 源节点
-    shouldFinishPairing, // 路由函数
-    {
-      [END]: END, // 始终返回 END
-    } as any
-  );
+    console.log('✅ LangGraph 图结构构建完成 (ReAct 模式)');
+    console.log('📊 图结构：START → react_agent → [条件判断] → react_agent (循环) 或 END');
+  } else {
+    // 传统模式：保留原有节点
+    // 步骤 2: 添加节点
+    graph.addNode('dish_recommender', dishRecommenderNode);
+    graph.addNode('beverage_pairing', beveragePairingNode);
 
-  // 步骤 6: 编译图
-  // 编译后的图可以执行，接收初始状态并返回最终状态
+    // 步骤 3: 设置入口点
+    graph.addEdge('__start__' as any, 'dish_recommender' as any);
+
+    // 步骤 4: 添加条件边
+    graph.addConditionalEdges(
+      'dish_recommender' as any,
+      shouldContinueToBeveragePairing,
+      {
+        beverage_pairing: 'beverage_pairing',
+        [END]: END,
+      } as any
+    );
+
+    graph.addConditionalEdges(
+      'beverage_pairing' as any,
+      shouldFinishPairing,
+      {
+        [END]: END,
+      } as any
+    );
+
+    console.log('✅ LangGraph 图结构构建完成 (传统模式)');
+    console.log('📊 图结构：START → dish_recommender → [条件判断] → beverage_pairing → [条件判断] → END');
+  }
+
+  // 步骤 5: 编译图
   const compiledGraph = graph.compile();
-
-  console.log('✅ LangGraph 图结构构建完成');
-  console.log('📊 图结构：START → dish_recommender → [条件判断] → beverage_pairing → [条件判断] → END');
 
   return compiledGraph;
 }
