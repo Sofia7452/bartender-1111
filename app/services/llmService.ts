@@ -7,9 +7,16 @@ interface LLMConfig {
   model: string;
 }
 
+interface CacheEntry {
+  data: any[];
+  timestamp: number;
+}
+
 export class LLMService {
   private openai: OpenAI;
   private config: LLMConfig;
+  private cache: Map<string, CacheEntry>;
+  private readonly CACHE_TTL: number = 30 * 60 * 1000; // 30分钟
 
   constructor(config?: Partial<LLMConfig>) {
     this.config = {
@@ -22,11 +29,67 @@ export class LLMService {
       apiKey: this.config.apiKey,
       baseURL: this.config.baseURL,
     });
+
+    this.cache = new Map<string, CacheEntry>();
+  }
+
+  // 缓存键生成：排序原料、转小写、逗号分隔
+  private getCacheKey(ingredients: string[]): string {
+    return ingredients.map(i => i.toLowerCase()).sort().join(',');
+  }
+
+  // 从缓存获取结果
+  private getFromCache(ingredients: string[]): any[] | null {
+    const key = this.getCacheKey(ingredients);
+    const cached = this.cache.get(key);
+
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      console.log('使用缓存结果');
+      return cached.data;
+    }
+
+    // 清理过期缓存
+    if (cached) {
+      this.cache.delete(key);
+    }
+
+    return null;
+  }
+
+  // 保存结果到缓存
+  private saveToCache(ingredients: string[], data: any[]): void {
+    const key = this.getCacheKey(ingredients);
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now()
+    });
+    console.log('缓存已保存');
+  }
+
+  // 清空所有缓存
+  clearCache(): void {
+    this.cache.clear();
+    console.log('缓存已清空');
+  }
+
+  // 获取缓存统计信息
+  getCacheStats(): { size: number; keys: string[] } {
+    return {
+      size: this.cache.size,
+      keys: Array.from(this.cache.keys())
+    };
   }
 
   // 生成鸡尾酒推荐
   async generateRecommendations(ingredients: string[]): Promise<any[]> {
     try {
+      // 检查缓存
+      const cachedResult = this.getFromCache(ingredients);
+      if (cachedResult !== null) {
+        console.log('使用缓存结果');
+        return cachedResult;
+      }
+
       // 验证配置
       if (!this.config.apiKey || this.config.apiKey === '' || this.config.apiKey.includes('your_openai_api_key')) {
         throw new Error('OPENAI_API_KEY 未配置或无效。请在环境变量中配置有效的 OpenAI API 密钥。');
@@ -39,15 +102,15 @@ export class LLMService {
         messages: [
           {
             role: 'system',
-            content: '你是一个专业的调酒师，擅长根据现有原料推荐合适的鸡尾酒配方。请提供详细、准确的配方信息。'
+            content: '你是一个专业的调酒师，根据原料推荐鸡尾酒配方'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        temperature: 0.7,
-        max_tokens: 2000,
+        temperature: 0.5,
+        max_tokens: 1200,
       });
 
       const content = response.choices[0]?.message?.content;
@@ -55,7 +118,12 @@ export class LLMService {
         throw new Error('LLM 返回内容为空');
       }
 
-      return this.parseRecommendations(content);
+      const recommendations = this.parseRecommendations(content);
+      
+      // 保存到缓存
+      this.saveToCache(ingredients, recommendations);
+
+      return recommendations;
     } catch (error: any) {
       console.error('LLM推荐生成失败:', error);
 
@@ -82,29 +150,26 @@ export class LLMService {
 
   // 构建推荐提示词
   private buildRecommendationPrompt(ingredients: string[]): string {
-    return `基于以下原料，推荐3-5个适合的鸡尾酒配方：
+    return `基于以下原料，推荐3个适合的鸡尾酒配方：
 
 原料列表：${ingredients.join('、')}
 
 请为每个推荐提供以下信息（JSON格式）：
 {
   "name": "鸡尾酒名称",
-  "description": "简短描述",
+  "description": "简短描述（控制在20字以内）",
   "ingredients": ["原料1 用量", "原料2 用量", ...],
   "steps": ["步骤1", "步骤2", ...],
   "difficulty": 1-5,
-  "estimatedTime": 分钟数,
-  "category": "分类",
-  "glassType": "杯型",
-  "technique": "调制技巧",
-  "garnish": "装饰"
+  "estimatedTime": 分钟数
 }
 
 请确保：
 1. 配方中的原料尽量使用用户提供的原料
 2. 难度等级：1=简单，2=容易，3=中等，4=困难，5=专家
-3. 制作步骤要详细清晰
-4. 返回有效的JSON数组格式`;
+3. description 控制在 20 字以内
+4. steps 精简到 3-5 步
+5. 返回有效的JSON数组格式`;
   }
 
   // 解析推荐结果
@@ -143,11 +208,7 @@ export class LLMService {
           ingredients: [],
           steps: [],
           difficulty: 1,
-          estimatedTime: 0,
-          category: '经典',
-          glassType: '古典杯',
-          technique: '摇和',
-          garnish: ''
+          estimatedTime: 0
         };
       }
 
