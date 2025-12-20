@@ -10,6 +10,8 @@ import { DishPairingCard } from './components/forms/DishPairingCard';
 import { Spinner } from './components/ui/Spinner';
 import { Input } from './components/ui/Input';
 import { Badge } from './components/ui/Badge';
+import { RecommendationModeToggle } from './components/forms/RecommendationModeToggle';
+import { StreamingRecommendationView } from './components/forms/StreamingRecommendationView';
 import type { CompletePairingRecommendation } from './types/foodPairing';
 
 interface Recipe {
@@ -50,6 +52,9 @@ export default function Home() {
   const [ragEnabled, setRagEnabled] = useState(false);
   const [flowchartEnabled, setFlowchartEnabled] = useState(false);
   const [flowchartData, setFlowchartData] = useState<string | null>(null);
+
+  // 推荐模式：标准或流式
+  const [recommendationMode, setRecommendationMode] = useState<'standard' | 'streaming'>('standard');
 
   // for cocktail pairing (legacy API - 保留用于向后兼容)
   const [pairingEnabled, setPairingEnabled] = useState(false);
@@ -353,76 +358,164 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* 原料输入区域（仅在未启用搭配模式时显示） */
-          <div className="max-w-2xl mx-auto mb-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>输入您的原料</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <IngredientInput
-                  value={ingredients}
-                  onChange={setIngredients}
-                  placeholder="输入原料名称，如：威士忌、柠檬、糖浆..."
-                  maxIngredients={8}
-                />
-              </CardContent>
-            </Card>
+          <>
+            {/* 推荐模式切换（仅在未启用搭配模式时显示） */}
+            <div className="max-w-2xl mx-auto mb-6">
+              <RecommendationModeToggle
+                mode={recommendationMode}
+                onChange={(mode) => {
+                  setRecommendationMode(mode);
+                  // 切换模式时清空结果和错误
+                  setRecommendations([]);
+                  setError(null);
+                }}
+                disabled={isLoading || (ragEnabled || flowchartEnabled)}
+              />
+              {(ragEnabled || flowchartEnabled) && (
+                <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                  ⚠️ 流式模式暂不支持 RAG 增强和流程图生成，请使用标准模式
+                </div>
+              )}
+            </div>
+
+            {/* 根据模式显示不同的推荐界面 */}
+            {recommendationMode === 'streaming' && !ragEnabled && !flowchartEnabled ? (
+              /* 流式推荐界面 */
+              <StreamingRecommendationView
+                onComplete={(recs) => {
+                  // 转换类型以匹配主页面的 Recipe 接口
+                  const convertedRecs = recs.map((rec) => ({
+                    ...rec,
+                    id: rec.id || crypto.randomUUID(),
+                    category: '',
+                    glassType: '',
+                    technique: '',
+                    garnish: undefined,
+                  }));
+                  setRecommendations(convertedRecs);
+                }}
+              />
+            ) : (
+              /* 标准推荐界面 */
+              <>
+                {/* 原料输入区域 */}
+                <div className="max-w-2xl mx-auto mb-8">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>输入您的原料</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <IngredientInput
+                        value={ingredients}
+                        onChange={setIngredients}
+                        placeholder="输入原料名称，如：威士忌、柠檬、糖浆..."
+                        maxIngredients={8}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* 推荐按钮 */}
+                <div className="text-center mb-8">
+                  <Button
+                    onClick={handleGetRecommendations}
+                    disabled={ingredients.length === 0 || isLoading}
+                    loading={isLoading}
+                    size="lg"
+                    className="px-8 py-3"
+                  >
+                    {isLoading ? '正在推荐...' : '获取推荐'}
+                  </Button>
+                </div>
+
+                {/* 错误提示 */}
+                {error && (
+                  <div className="max-w-2xl mx-auto mb-8">
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-red-600 text-sm">{error}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 流程图显示 */}
+                {flowchartData && (
+                  <div className="max-w-4xl mx-auto mb-8">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>制作流程图</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-center">
+                          <img
+                            src={flowchartData}
+                            alt="鸡尾酒制作流程图"
+                            className="max-w-full h-auto mx-auto border rounded-lg shadow-sm"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* 传统鸡尾酒推荐结果 */}
+                {recommendations.length > 0 && (
+                  <div className="space-y-6">
+                    <h2 className="text-2xl font-bold text-gray-900 text-center">
+                      为您推荐以下配方
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {recommendations.map((recipe) => (
+                        <RecipeCard
+                          key={recipe.id}
+                          recipe={recipe}
+                          onFavorite={(id) => console.log('收藏配方:', id)}
+                          onViewDetails={(id) => console.log('查看详情:', id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 空状态 */}
+                {ingredients.length === 0 && recommendations.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">🍸</div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                      开始您的调酒之旅
+                    </h3>
+                    <p className="text-gray-600">
+                      输入您现有的原料，我们将为您推荐最适合的鸡尾酒配方
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* 搭配模式的推荐按钮 */}
+        {pairingEnabled && (
+          <div className="text-center mb-8">
+            <Button
+              onClick={handleGetRecommendations}
+              disabled={foodIngredients.length === 0 || isFoodPairingLoading}
+              loading={isFoodPairingLoading}
+              size="lg"
+              className="px-8 py-3"
+            >
+              {isFoodPairingLoading ? '正在推荐...' : '获取搭配推荐'}
+            </Button>
           </div>
         )}
 
-        {/* 推荐按钮 */}
-        <div className="text-center mb-8">
-          <Button
-            onClick={handleGetRecommendations}
-            disabled={
-              pairingEnabled
-                ? foodIngredients.length === 0 || isFoodPairingLoading
-                : ingredients.length === 0 || isLoading
-            }
-            loading={pairingEnabled ? isFoodPairingLoading : isLoading}
-            size="lg"
-            className="px-8 py-3"
-          >
-            {pairingEnabled
-              ? isFoodPairingLoading
-                ? '正在推荐...'
-                : '获取搭配推荐'
-              : isLoading
-                ? '正在推荐...'
-                : '获取推荐'}
-          </Button>
-        </div>
-
-
-        {/* 错误提示 */}
-        {(error || pairingError || foodPairingError) && (
+        {/* 搭配模式的错误提示 */}
+        {(pairingError || foodPairingError) && (
           <div className="max-w-2xl mx-auto mb-8">
             <div className="p-4 bg-red-50 border border-red-200 rounded-md">
               <p className="text-red-600 text-sm">
-                {error || pairingError || foodPairingError}
+                {pairingError || foodPairingError}
               </p>
             </div>
-          </div>
-        )}
-
-        {/* 流程图显示 */}
-        {flowchartData && (
-          <div className="max-w-4xl mx-auto mb-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>制作流程图</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center">
-                  <img
-                    src={flowchartData}
-                    alt="鸡尾酒制作流程图"
-                    className="max-w-full h-auto mx-auto border rounded-lg shadow-sm"
-                  />
-                </div>
-              </CardContent>
-            </Card>
           </div>
         )}
 
@@ -502,38 +595,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* 传统鸡尾酒推荐结果（向后兼容） */}
-        {!pairingEnabled && recommendations.length > 0 && (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900 text-center">
-              为您推荐以下配方
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {recommendations.map((recipe) => (
-                <RecipeCard
-                  key={recipe.id}
-                  recipe={recipe}
-                  onFavorite={(id) => console.log('收藏配方:', id)}
-                  onViewDetails={(id) => console.log('查看详情:', id)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 空状态 */}
-        {!pairingEnabled && ingredients.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🍸</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              开始您的调酒之旅
-            </h3>
-            <p className="text-gray-600">
-              输入您现有的原料，我们将为您推荐最适合的鸡尾酒配方
-            </p>
           </div>
         )}
       </div>

@@ -77,7 +77,7 @@
   - 创建 ReadableStream 并返回 NextResponse
   - _Requirements: 5.2, 5.3_
 
-- [ ] 4.1 实现 Server-Sent Events 格式
+- [x] 4.1 实现 Server-Sent Events 格式
   - 在流式 API 路由中创建 TextEncoder 实例
   - 在 ReadableStream 的 start 方法中调用 llmService.generateRecommendationsStream()
   - onChunk 回调中将每个 chunk 格式化为 `data: ${JSON.stringify({chunk})}\n\n`
@@ -86,7 +86,7 @@
   - 设置响应头：Content-Type: 'text/event-stream', Cache-Control: 'no-cache', Connection: 'keep-alive'
   - _Requirements: 3.3, 5.3_
 
-- [ ] 4.2 确保 API 兼容性
+- [x] 4.2 确保 API 兼容性
   - 验证现有 /api/recommend 路由保持不变（无需修改）
   - 在流式 API 路由中使用相同的 llmService 实例（共享缓存）
   - 手动测试现有 API 功能未受影响
