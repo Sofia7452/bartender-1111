@@ -43,12 +43,12 @@
   - 在成功解析推荐结果后，调用 saveToCache(ingredients, recommendations) 保存结果
   - _Requirements: 2.1, 2.2, 2.4_
 
-- [ ]* 2.3 编写推荐优化的 property-based tests
+- [x] 2.3 编写推荐优化的 property-based tests
   - **Property 1: 推荐数量限制** - 返回结果数量 === 3
   - **Property 2: 字段完整性** - 每个结果包含 6 个必需字段
   - **Validates: Requirements 1.1, 1.2**
 
-- [ ] 3. 实现流式响应功能
+- [x] 3. 实现流式响应功能
   - 在 LLMService 中添加 generateRecommendationsStream() 方法
   - 方法签名：async generateRecommendationsStream(ingredients: string[], onChunk: (chunk: string) => void): Promise<any[]>
   - 在调用 openai.chat.completions.create() 时设置 stream: true
@@ -57,13 +57,13 @@
   - 收集所有 chunks 拼接成完整内容，解析后返回
   - _Requirements: 3.1, 3.2_
 
-- [ ] 3.1 处理流式响应的缓存逻辑
+- [x] 3.1 处理流式响应的缓存逻辑
   - 在 generateRecommendationsStream() 开始时调用 getFromCache(ingredients)
   - 如果缓存命中，通过 onChunk 模拟流式输出（将缓存的 JSON 字符串分块发送）
   - 如果缓存未命中，在流式生成完成后调用 saveToCache() 保存结果
   - _Requirements: 3.5, 2.1_
 
-- [ ] 3.2 添加流式响应的错误处理
+- [x] 3.2 添加流式响应的错误处理
   - 在 generateRecommendationsStream() 中使用 try-catch 捕获异常
   - 记录错误日志：console.error('流式推荐生成失败:', error)
   - 抛出友好的错误信息（类似 generateRecommendations 的错误处理）

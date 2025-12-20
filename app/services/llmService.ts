@@ -253,6 +253,97 @@ export class LLMService {
     return items.filter(item => item.length > 0);
   }
 
+  // 生成鸡尾酒推荐（流式）
+  async generateRecommendationsStream(
+    ingredients: string[],
+    onChunk: (chunk: string) => void
+  ): Promise<any[]> {
+    try {
+      // 检查缓存
+      const cachedResult = this.getFromCache(ingredients);
+      if (cachedResult !== null) {
+        console.log('使用缓存结果（流式模拟）');
+        // 模拟流式输出：将缓存的 JSON 字符串分块发送
+        const cachedJson = JSON.stringify(cachedResult);
+        const chunkSize = 50; // 每次发送50个字符
+        for (let i = 0; i < cachedJson.length; i += chunkSize) {
+          const chunk = cachedJson.slice(i, i + chunkSize);
+          onChunk(chunk);
+          // 添加小延迟以模拟流式效果
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        return cachedResult;
+      }
+
+      // 验证配置
+      if (!this.config.apiKey || this.config.apiKey === '' || this.config.apiKey.includes('your_openai_api_key')) {
+        throw new Error('OPENAI_API_KEY 未配置或无效。请在环境变量中配置有效的 OpenAI API 密钥。');
+      }
+
+      const prompt = this.buildRecommendationPrompt(ingredients);
+
+      // 启用流式响应
+      const response = await this.openai.chat.completions.create({
+        model: this.config.model,
+        messages: [
+          {
+            role: 'system',
+            content: '你是一个专业的调酒师，根据原料推荐鸡尾酒配方'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.5,
+        max_tokens: 1200,
+        stream: true,
+      });
+
+      // 收集所有 chunks
+      let fullContent = '';
+      for await (const chunk of response) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) {
+          fullContent += content;
+          onChunk(content);
+        }
+      }
+
+      if (!fullContent) {
+        throw new Error('LLM 返回内容为空');
+      }
+
+      const recommendations = this.parseRecommendations(fullContent);
+      
+      // 保存到缓存
+      this.saveToCache(ingredients, recommendations);
+
+      return recommendations;
+    } catch (error: any) {
+      console.error('流式推荐生成失败:', error);
+
+      // 提供更详细的错误信息
+      let errorMessage = '推荐生成失败，请检查LLM配置';
+
+      if (error?.message) {
+        if (error.message.includes('API key')) {
+          errorMessage = 'OpenAI API 密钥无效或未配置。请在 Vercel 环境变量中配置 OPENAI_API_KEY。';
+        } else if (error.message.includes('rate limit')) {
+          errorMessage = 'OpenAI API 请求频率超限，请稍后重试。';
+        } else if (error.message.includes('quota')) {
+          errorMessage = 'OpenAI API 配额已用完，请检查账户余额。';
+        } else if (error.message.includes('network') || error.message.includes('timeout')) {
+          errorMessage = '网络连接失败，请检查网络连接。';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      throw new Error(errorMessage);
+    }
+  }
+
   // 更新配置
   updateConfig(newConfig: Partial<LLMConfig>) {
     this.config = { ...this.config, ...newConfig };
