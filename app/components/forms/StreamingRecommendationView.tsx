@@ -30,6 +30,7 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
     recommendations,
     error,
     progress,
+    isCacheHit,
     startStreaming,
     reset,
   } = useStreamingRecommendation({
@@ -39,10 +40,6 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
     },
     onError: (err) => {
       console.error('❌ 流式推荐错误:', err);
-    },
-    onChunk: (chunk) => {
-      // 可以在这里添加实时日志
-      // console.log('📦 收到新内容:', chunk);
     },
   });
 
@@ -69,7 +66,6 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
               onChange={setIngredients}
               placeholder="输入原料名称，如：威士忌、柠檬、糖浆..."
               maxIngredients={8}
-              disabled={isStreaming}
             />
 
             <div className="flex gap-3">
@@ -124,11 +120,11 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
         </Card>
       )}
 
-      {/* 实时内容预览（开发模式） */}
-      {process.env.NODE_ENV === 'development' && streamedContent && (
+      {/* 实时内容预览（无缓存时显示） */}
+      {!isCacheHit && streamedContent && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">实时内容预览（开发模式）</CardTitle>
+            <CardTitle className="text-sm">实时内容预览</CardTitle>
           </CardHeader>
           <CardContent>
             <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
@@ -136,6 +132,21 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
             </pre>
           </CardContent>
         </Card>
+      )}
+
+      {/* 缓存命中提示 */}
+      {isCacheHit && recommendations.length > 0 && (
+        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <div>
+              <h4 className="text-sm font-semibold text-green-800">缓存命中</h4>
+              <p className="text-sm text-green-600 mt-1">使用了之前的推荐结果，响应更快</p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 错误提示 */}

@@ -22,6 +22,7 @@ export function useStreamingRecommendation(options: UseStreamingRecommendationOp
   const [recommendations, setRecommendations] = useState<Recipe[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [isCacheHit, setIsCacheHit] = useState(false);
 
   const startStreaming = useCallback(async (ingredients: string[]) => {
     if (ingredients.length === 0) {
@@ -34,6 +35,7 @@ export function useStreamingRecommendation(options: UseStreamingRecommendationOp
     setRecommendations([]);
     setError(null);
     setProgress(0);
+    setIsCacheHit(false);
 
     try {
       const response = await fetch('/api/recommend/stream', {
@@ -88,6 +90,13 @@ export function useStreamingRecommendation(options: UseStreamingRecommendationOp
               if (parsed.error) {
                 setError(parsed.error);
                 options.onError?.(parsed.error);
+                continue;
+              }
+
+              // 检测缓存命中标识
+              if (parsed.cacheHit === true) {
+                setIsCacheHit(true);
+                console.log('💾 检测到缓存命中（后端标识）');
                 continue;
               }
 
@@ -155,6 +164,7 @@ export function useStreamingRecommendation(options: UseStreamingRecommendationOp
     setRecommendations([]);
     setError(null);
     setProgress(0);
+    setIsCacheHit(false);
   }, []);
 
   return {
@@ -163,6 +173,7 @@ export function useStreamingRecommendation(options: UseStreamingRecommendationOp
     recommendations,
     error,
     progress,
+    isCacheHit,
     startStreaming,
     reset,
   };

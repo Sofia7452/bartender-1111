@@ -256,19 +256,21 @@ export class LLMService {
   // 生成鸡尾酒推荐（流式）
   async generateRecommendationsStream(
     ingredients: string[],
-    onChunk: (chunk: string) => void
+    onChunk: (chunk: string, isCacheHit?: boolean) => void
   ): Promise<any[]> {
     try {
       // 检查缓存
       const cachedResult = this.getFromCache(ingredients);
       if (cachedResult !== null) {
         console.log('使用缓存结果（流式模拟）');
+        // 发送缓存标识
+        onChunk('', true);
         // 模拟流式输出：将缓存的 JSON 字符串分块发送
         const cachedJson = JSON.stringify(cachedResult);
         const chunkSize = 50; // 每次发送50个字符
         for (let i = 0; i < cachedJson.length; i += chunkSize) {
           const chunk = cachedJson.slice(i, i + chunkSize);
-          onChunk(chunk);
+          onChunk(chunk, true);
           // 添加小延迟以模拟流式效果
           await new Promise(resolve => setTimeout(resolve, 10));
         }

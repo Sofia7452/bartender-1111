@@ -25,13 +25,27 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          let isCacheHit = false;
+
           // 调用 llmService.generateRecommendationsStream()
           await llmService.generateRecommendationsStream(
             ingredients,
-            (chunk: string) => {
+            (chunk: string, cacheHit?: boolean) => {
+              // 检测缓存命中
+              if (cacheHit !== undefined) {
+                isCacheHit = cacheHit;
+                // 发送缓存标识
+                if (cacheHit) {
+                  const cacheData = `data: ${JSON.stringify({ cacheHit: true })}\n\n`;
+                  controller.enqueue(encoder.encode(cacheData));
+                }
+              }
+
               // 将每个 chunk 格式化为 Server-Sent Events 格式
-              const data = `data: ${JSON.stringify({ chunk })}\n\n`;
-              controller.enqueue(encoder.encode(data));
+              if (chunk) {
+                const data = `data: ${JSON.stringify({ chunk })}\n\n`;
+                controller.enqueue(encoder.encode(data));
+              }
             }
           );
 
@@ -39,7 +53,7 @@ export async function POST(request: NextRequest) {
           const doneSignal = `data: [DONE]\n\n`;
           controller.enqueue(encoder.encode(doneSignal));
 
-          console.log(`✅ 流式推荐完成`);
+          console.log(`✅ 流式推荐完成${isCacheHit ? '（缓存命中）' : ''}`);
           controller.close();
         } catch (error) {
           console.error('流式推荐错误:', error);
