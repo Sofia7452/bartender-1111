@@ -36,7 +36,7 @@ export function StreamingRecipeCard({
   }, [animationDelay]);
 
   const difficultyLabels = ['', '简单', '容易', '中等', '困难', '专家'];
-  const difficultyColors = ['', 'success', 'info', 'warning', 'danger', 'danger'] as const;
+  const difficultyColors = ['', 'success', 'info', 'warning', 'error', 'error'] as const;
 
   return (
     <div
