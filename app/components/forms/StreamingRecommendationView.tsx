@@ -29,7 +29,6 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
     streamedContent,
     recommendations,
     error,
-    progress,
     isCacheHit,
     startStreaming,
     reset,
@@ -91,34 +90,6 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
           </div>
         </CardContent>
       </Card>
-
-      {/* 进度条 */}
-      {isStreaming && (
-        <Card>
-          <CardContent className="py-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">生成进度</span>
-                <span className="font-semibold text-blue-600">{Math.round(progress)}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
-                  <span>正在接收内容...</span>
-                </div>
-                <span>•</span>
-                <span>已接收 {streamedContent.length} 字符</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* 实时内容预览（无缓存时显示） */}
       {!isCacheHit && streamedContent && (

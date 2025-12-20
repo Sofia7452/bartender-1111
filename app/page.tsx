@@ -54,7 +54,7 @@ export default function Home() {
   const [flowchartData, setFlowchartData] = useState<string | null>(null);
 
   // 推荐模式：标准或流式
-  const [recommendationMode, setRecommendationMode] = useState<'standard' | 'streaming'>('standard');
+  const [recommendationMode, setRecommendationMode] = useState<'standard' | 'streaming'>('streaming');
 
   // for cocktail pairing (legacy API - 保留用于向后兼容)
   const [pairingEnabled, setPairingEnabled] = useState(false);
