@@ -221,7 +221,7 @@ export async function GET(request: NextRequest) {
     // 2. 从查询参数中获取 page 和 limit
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
-    let limit = parseInt(searchParams.get('limit') || '20', 10); // 默认值从 10 改为 20
+    let limit = parseInt(searchParams.get('limit') || '10', 10);
 
     // 3. 验证 limit 范围（最大50）
     if (limit > 50) {
@@ -229,7 +229,7 @@ export async function GET(request: NextRequest) {
       console.warn(`⚠️ limit 超过最大值，已限制为 50`);
     }
     if (limit < 1) {
-      limit = 20;
+      limit = 10;
     }
 
     // 验证 page 范围
