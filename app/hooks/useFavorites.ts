@@ -106,7 +106,7 @@ function getSessionIdFromCookie(): string | null {
 export function useFavorites(options: UseFavoritesOptions = {}): UseFavoritesReturn {
   const {
     page: initialPage = 1,
-    limit = 20,
+    limit = 10,
     enabled = true,
   } = options;
 

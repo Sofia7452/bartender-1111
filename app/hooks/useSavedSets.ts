@@ -125,7 +125,7 @@ function getSessionIdFromCookie(): string | null {
 export function useSavedSets(options: UseSavedSetsOptions = {}): UseSavedSetsReturn {
   const {
     page: initialPage = 1,
-    limit = 20,
+    limit = 10,
     enabled = true,
   } = options;
 

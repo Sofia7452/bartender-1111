@@ -21,7 +21,7 @@ export function FavoritesExample() {
   // Custom usage with options
   const customHook = useFavorites({
     page: 1,
-    limit: 20,
+    limit: 10,
     enabled: true, // Auto-load on mount
   });
 

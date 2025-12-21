@@ -8,11 +8,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeDatabase } from '../../lib/database';
+import { prisma } from '../../lib/prisma';
 import { getSessionIdFromRequest, setSessionCookie } from '../../lib/session';
 import {
   saveDish,
   createSavedSet,
-  getSavedSets,
   deleteSavedSet,
 } from '../../services/savedSetService';
 import type { DishRecommendation } from '../../types/foodPairing';
@@ -417,6 +417,8 @@ export async function POST(request: NextRequest) {
  * }
  */
 export async function GET(request: NextRequest) {
+  const startTime = performance.now();
+  
   try {
     // 1. 获取或生成 sessionId
     const sessionId = getSessionIdFromRequest(request);
@@ -455,62 +457,114 @@ export async function GET(request: NextRequest) {
     // 4. 初始化数据库连接
     await initializeDatabase();
 
-    // 5. 查询套装列表
-    const result = await getSavedSets(sessionId, page, limit);
+    // 5. 计算分页参数
+    const skip = (page - 1) * limit;
+    
+    const queryStartTime = performance.now();
 
-    // 6. 格式化响应数据
-    const savedSetsData = result.savedSets.map((savedSet) => ({
+    // 6. 查询套装列表（使用 select 优化，只返回必需字段）
+    const [savedSets, total] = await Promise.all([
+      prisma.savedSet.findMany({
+        where: { sessionId },
+        select: {
+          id: true,
+          sessionId: true,
+          name: true,
+          description: true,
+          createdAt: true,
+          updatedAt: true,
+          dish: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              cuisine: true,
+              requiredIngredients: true,
+              cookingTime: true,
+              difficulty: true,
+              steps: true,
+              source: true,
+              tags: true,
+            }
+          },
+          recipes: {
+            select: {
+              recipe: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  ingredients: true,
+                  steps: true,
+                  difficulty: true,
+                  estimatedTime: true,
+                  category: true,
+                  glassType: true,
+                  technique: true,
+                  garnish: true,
+                }
+              }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.savedSet.count({
+        where: { sessionId }
+      })
+    ]);
+
+    const queryEndTime = performance.now();
+    const queryDuration = queryEndTime - queryStartTime;
+    
+    console.log(`✅ 查询完成，找到 ${total} 个套装，当前页 ${savedSets.length} 个`);
+    console.log(`⏱️ [Performance] 数据库查询耗时: ${queryDuration.toFixed(2)}ms`);
+
+    // 7. 格式化响应数据（数据已经通过 select 优化，直接映射即可）
+    const savedSetsData = savedSets.map((savedSet: any) => ({
       id: savedSet.id,
       sessionId: savedSet.sessionId,
       name: savedSet.name,
       description: savedSet.description,
       createdAt: savedSet.createdAt,
       updatedAt: savedSet.updatedAt,
-      dish: {
-        id: savedSet.dish.id,
-        name: savedSet.dish.name,
-        description: savedSet.dish.description,
-        cuisine: savedSet.dish.cuisine,
-        requiredIngredients: savedSet.dish.requiredIngredients,
-        cookingTime: savedSet.dish.cookingTime,
-        difficulty: savedSet.dish.difficulty,
-        steps: savedSet.dish.steps,
-        source: savedSet.dish.source,
-        tags: savedSet.dish.tags,
-      },
-      recipes: savedSet.recipes.map((sr) => ({
-        id: sr.recipe.id,
-        name: sr.recipe.name,
-        description: sr.recipe.description,
-        ingredients: sr.recipe.ingredients,
-        steps: sr.recipe.steps,
-        difficulty: sr.recipe.difficulty,
-        estimatedTime: sr.recipe.estimatedTime,
-        category: sr.recipe.category,
-        glassType: sr.recipe.glassType,
-        technique: sr.recipe.technique,
-        garnish: sr.recipe.garnish,
-      })),
+      dish: savedSet.dish,
+      recipes: savedSet.recipes.map((sr: any) => sr.recipe),
     }));
 
-    // 7. 创建响应
+    const endTime = performance.now();
+    const totalDuration = endTime - startTime;
+    
+    console.log(`⏱️ [Performance] API 总耗时: ${totalDuration.toFixed(2)}ms`);
+
+    // 8. 创建响应
     const response = NextResponse.json({
       success: true,
       savedSets: savedSetsData,
-      pagination: result.pagination,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
     });
 
-    // 8. 如果 sessionId 是新生成的，设置到 cookie 中
+    // 9. 如果 sessionId 是新生成的，设置到 cookie 中
     if (!hasExistingCookie) {
       setSessionCookie(response, sessionId);
       console.log(`🍪 已设置 sessionId cookie`);
     }
 
-    console.log(`✅ 查询完成，找到 ${result.pagination.total} 个套装，当前页 ${savedSetsData.length} 个`);
     return response;
 
   } catch (error) {
+    const endTime = performance.now();
+    const totalDuration = endTime - startTime;
+    
     console.error('获取套装列表API错误:', error);
+    console.log(`⏱️ [Performance] API 错误耗时: ${totalDuration.toFixed(2)}ms`);
 
     return NextResponse.json(
       {

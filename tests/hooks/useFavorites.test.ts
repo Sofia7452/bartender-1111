@@ -26,7 +26,7 @@ describe('useFavorites Hook', () => {
     // TypeScript compilation will catch interface mismatches
     const options = {
       page: 1,
-      limit: 20,
+      limit: 10,
       enabled: true,
     };
 
