@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getFavoritesCache, CACHE_KEYS } from '../lib/favoritesCache';
+import { performanceMonitor } from '../lib/performanceMonitor';
 
 /**
  * Recipe interface matching the API response
@@ -138,6 +139,7 @@ export function useFavorites(options: UseFavoritesOptions = {}): UseFavoritesRet
 
         if (cachedData && cachedData.success && cachedData.favorites && cachedData.pagination) {
           console.log(`[useFavorites] Cache hit for page ${page}`);
+          performanceMonitor.trackCacheHit(cacheKey, true);
           
           if (appendMode) {
             setFavorites(prev => [...prev, ...cachedData.favorites!]);
@@ -147,12 +149,15 @@ export function useFavorites(options: UseFavoritesOptions = {}): UseFavoritesRet
           setPagination(cachedData.pagination);
           setLoading(false);
           return;
+        } else {
+          performanceMonitor.trackCacheHit(cacheKey, false);
         }
       }
 
       // Cache miss or no sessionId - fetch from API
       console.log(`[useFavorites] Cache miss for page ${page}, fetching from API`);
       
+      const apiStartTime = performance.now();
       const response = await fetch(`/api/favorites?page=${page}&limit=${limit}`);
       
       if (!response.ok) {
@@ -160,6 +165,8 @@ export function useFavorites(options: UseFavoritesOptions = {}): UseFavoritesRet
       }
 
       const data: FavoritesResponse = await response.json();
+      const apiEndTime = performance.now();
+      performanceMonitor.trackAPICall('/api/favorites', apiEndTime - apiStartTime);
 
       if (!data.success) {
         throw new Error(data.error || 'Failed to fetch favorites');

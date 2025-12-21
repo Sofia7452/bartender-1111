@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getFavoritesCache, CACHE_KEYS } from '../lib/favoritesCache';
+import { performanceMonitor } from '../lib/performanceMonitor';
 
 /**
  * Recipe interface matching the API response
@@ -157,6 +158,7 @@ export function useSavedSets(options: UseSavedSetsOptions = {}): UseSavedSetsRet
 
         if (cachedData && cachedData.success && cachedData.savedSets && cachedData.pagination) {
           console.log(`[useSavedSets] Cache hit for page ${page}`);
+          performanceMonitor.trackCacheHit(cacheKey, true);
           
           if (appendMode) {
             setSavedSets(prev => [...prev, ...cachedData.savedSets!]);
@@ -166,12 +168,15 @@ export function useSavedSets(options: UseSavedSetsOptions = {}): UseSavedSetsRet
           setPagination(cachedData.pagination);
           setLoading(false);
           return;
+        } else {
+          performanceMonitor.trackCacheHit(cacheKey, false);
         }
       }
 
       // Cache miss or no sessionId - fetch from API
       console.log(`[useSavedSets] Cache miss for page ${page}, fetching from API`);
       
+      const apiStartTime = performance.now();
       const response = await fetch(`/api/saved-sets?page=${page}&limit=${limit}`);
       
       if (!response.ok) {
@@ -179,6 +184,8 @@ export function useSavedSets(options: UseSavedSetsOptions = {}): UseSavedSetsRet
       }
 
       const data: SavedSetsResponse = await response.json();
+      const apiEndTime = performance.now();
+      performanceMonitor.trackAPICall('/api/saved-sets', apiEndTime - apiStartTime);
 
       if (!data.success) {
         throw new Error(data.error || 'Failed to fetch saved sets');

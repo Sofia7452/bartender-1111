@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card, CardContent } from '../components/ui/Card';
 import { RecipeCard } from '../components/forms/RecipeCard';
@@ -9,6 +9,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { useFavorites, type FavoriteItem as HookFavoriteItem } from '../hooks/useFavorites';
 import { useSavedSets, type SavedSetItem as HookSavedSetItem } from '../hooks/useSavedSets';
+import { performanceMonitor } from '../lib/performanceMonitor';
 
 type FilterTag = 'all' | 'recipes' | 'sets';
 
@@ -46,6 +47,15 @@ export default function FavoritesPage() {
   // 筛选标签状态
   const [filterTag, setFilterTag] = useState<FilterTag>('all');
 
+  // 页面加载时间监控
+  useEffect(() => {
+    const pageLoadStart = performance.now();
+    
+    return () => {
+      // 组件卸载时不记录
+    };
+  }, []);
+
   // 使用 useFavorites hook - 独立加载收藏数据
   const {
     favorites,
@@ -63,6 +73,15 @@ export default function FavoritesPage() {
     pagination: setsPagination,
     refetch: refetchSets,
   } = useSavedSets({ page: 1, limit: 10 });
+
+  // 监控页面加载完成时间（当两个数据源都加载完成时）
+  useEffect(() => {
+    if (!favoritesLoading && !setsLoading) {
+      const pageLoadEnd = performance.now();
+      const pageLoadTime = pageLoadEnd - performance.timeOrigin;
+      performanceMonitor.trackPageLoad('favorites', pageLoadTime);
+    }
+  }, [favoritesLoading, setsLoading]);
 
   // 处理取消收藏
   const handleUnfavorite = async (recipeId: string, isFavorited: boolean) => {
