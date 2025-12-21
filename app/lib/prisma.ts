@@ -19,8 +19,32 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    log: process.env.NODE_ENV === 'development' 
+      ? [
+          { emit: 'event', level: 'query' },
+          { emit: 'stdout', level: 'error' },
+          { emit: 'stdout', level: 'warn' },
+        ]
+      : ['error'],
   });
+
+// 在开发环境中监听查询事件，记录慢查询
+if (process.env.NODE_ENV === 'development') {
+  prisma.$on('query' as never, (e: any) => {
+    const duration = e.duration;
+    
+    // 记录所有查询（用于诊断）
+    if (duration > 50) {
+      console.log(`\n[Prisma Query] 耗时: ${duration}ms`);
+      console.log(`  Query: ${e.query.substring(0, 200)}${e.query.length > 200 ? '...' : ''}`);
+      
+      // 慢查询警告（> 500ms）
+      if (duration > 500) {
+        console.warn(`  ⚠️ 慢查询警告！建议优化此查询`);
+      }
+    }
+  });
+}
 
 // 在非生产环境中，将实例存储在 globalThis 中，避免热重载时创建多个连接
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;

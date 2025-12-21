@@ -454,8 +454,8 @@ export async function GET(request: NextRequest) {
 
     console.log(`📋 获取套装列表，sessionId: ${sessionId}, page: ${page}, limit: ${limit}`);
 
-    // 4. 初始化数据库连接
-    await initializeDatabase();
+    // Prisma Client 会自动管理连接池，不需要每次都初始化
+    // await initializeDatabase(); // ❌ 已移除，减少不必要的连接初始化时间
 
     // 5. 计算分页参数
     const skip = (page - 1) * limit;

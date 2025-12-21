@@ -242,8 +242,8 @@ export async function GET(request: NextRequest) {
 
     console.log(`📋 获取收藏列表，sessionId: ${sessionId}, page: ${page}, limit: ${limit}`);
 
-    // 4. 初始化数据库连接
-    await initializeDatabase();
+    // Prisma Client 会自动管理连接池，不需要每次都初始化
+    // await initializeDatabase(); // ❌ 已移除，减少不必要的连接初始化时间
 
     // 5. 使用 Prisma Client 查询该sessionId的所有收藏记录，并关联 recipe 实体
     // 计算分页参数
