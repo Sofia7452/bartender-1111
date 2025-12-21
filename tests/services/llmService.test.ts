@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
-import { LLMService } from './llmService';
+import { LLMService } from '../../app/services/llmService';
 
 describe('LLMService Cache Property-Based Tests', () => {
   let llmService: LLMService;
