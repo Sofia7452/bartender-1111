@@ -28,7 +28,7 @@
   - 测试错误处理
   - _需求: 1.2, 4.2_
 
-- [ ] 3. 创建 useSavedSets Hook
+- [x] 3. 创建 useSavedSets Hook
   - 实现数据获取逻辑
   - 集成缓存管理器
   - 实现加载状态和错误处理
@@ -43,7 +43,7 @@
   - 测试错误处理
   - _需求: 1.2, 4.2_
 
-- [ ] 4. 优化 API 路由 - GET /api/favorites
+- [x] 4. 优化 API 路由 - GET /api/favorites
   - 修改默认 limit 从 10 改为 20
   - 使用 Prisma select 只返回必需字段
   - 验证索引使用情况

@@ -201,9 +201,11 @@ export async function POST(request: NextRequest) {
 
 /**
  * 获取收藏列表
- * GET /api/favorites?page=1&limit=10
+ * GET /api/favorites?page=1&limit=20
  */
 export async function GET(request: NextRequest) {
+  const startTime = performance.now();
+  
   try {
     // 1. 获取或生成 sessionId
     const sessionId = getSessionIdFromRequest(request);
@@ -219,7 +221,7 @@ export async function GET(request: NextRequest) {
     // 2. 从查询参数中获取 page 和 limit
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
-    let limit = parseInt(searchParams.get('limit') || '10', 10);
+    let limit = parseInt(searchParams.get('limit') || '20', 10); // 默认值从 10 改为 20
 
     // 3. 验证 limit 范围（最大50）
     if (limit > 50) {
@@ -227,7 +229,7 @@ export async function GET(request: NextRequest) {
       console.warn(`⚠️ limit 超过最大值，已限制为 50`);
     }
     if (limit < 1) {
-      limit = 10;
+      limit = 20;
     }
 
     // 验证 page 范围
@@ -247,14 +249,34 @@ export async function GET(request: NextRequest) {
     // 计算分页参数
     const skip = (page - 1) * limit;
 
-    // 查询收藏记录（关联 Recipe 实体）
+    const queryStartTime = performance.now();
+    
+    // 查询收藏记录（使用 select 只返回必需字段）
     const [favorites, total] = await Promise.all([
       prisma.userFavorite.findMany({
         where: {
           sessionId
         },
-        include: {
-          recipe: true // 关联 Recipe 实体
+        select: {
+          id: true,
+          sessionId: true,
+          recipeId: true,
+          createdAt: true,
+          recipe: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              ingredients: true,
+              steps: true,
+              difficulty: true,
+              estimatedTime: true,
+              category: true,
+              glassType: true,
+              technique: true,
+              garnish: true
+            }
+          }
         },
         orderBy: {
           createdAt: 'desc' // 按创建时间降序排序
@@ -269,31 +291,28 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
+    const queryEndTime = performance.now();
+    const queryDuration = queryEndTime - queryStartTime;
+    
     console.log(`✅ 查询完成，找到 ${total} 条收藏记录，当前页 ${favorites.length} 条`);
+    console.log(`⏱️ [Performance] 数据库查询耗时: ${queryDuration.toFixed(2)}ms`);
 
     // 6. 计算总页数
     const pages = Math.ceil(total / limit);
 
-    // 7. 格式化响应数据
+    // 7. 格式化响应数据（数据已经通过 select 优化，无需额外处理）
     const favoritesData = favorites.map((favorite) => ({
       id: favorite.id,
       sessionId: favorite.sessionId,
       recipeId: favorite.recipeId,
       createdAt: favorite.createdAt,
-      recipe: favorite.recipe ? {
-        id: favorite.recipe.id,
-        name: favorite.recipe.name,
-        description: favorite.recipe.description,
-        ingredients: favorite.recipe.ingredients,
-        steps: favorite.recipe.steps,
-        difficulty: favorite.recipe.difficulty,
-        estimatedTime: favorite.recipe.estimatedTime,
-        category: favorite.recipe.category,
-        glassType: favorite.recipe.glassType,
-        technique: favorite.recipe.technique,
-        garnish: favorite.recipe.garnish
-      } : null
+      recipe: favorite.recipe
     }));
+
+    const endTime = performance.now();
+    const totalDuration = endTime - startTime;
+    
+    console.log(`⏱️ [Performance] API 总耗时: ${totalDuration.toFixed(2)}ms`);
 
     // 8. 创建响应
     const response = NextResponse.json({
@@ -316,7 +335,11 @@ export async function GET(request: NextRequest) {
     return response;
 
   } catch (error) {
+    const endTime = performance.now();
+    const totalDuration = endTime - startTime;
+    
     console.error('获取收藏列表API错误:', error);
+    console.log(`⏱️ [Performance] API 错误耗时: ${totalDuration.toFixed(2)}ms`);
 
     return NextResponse.json(
       {
