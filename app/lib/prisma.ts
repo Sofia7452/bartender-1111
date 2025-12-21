@@ -26,6 +26,12 @@ export const prisma =
           { emit: 'stdout', level: 'warn' },
         ]
       : ['error'],
+    // 优化连接池配置
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
   });
 
 // 在开发环境中监听查询事件，记录慢查询

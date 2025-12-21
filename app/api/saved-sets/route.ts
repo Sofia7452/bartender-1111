@@ -254,13 +254,11 @@ export async function POST(request: NextRequest) {
       console.log(`📝 使用现有 sessionId: ${sessionId}`);
     }
 
-    // 4. 初始化数据库连接
-    await initializeDatabase();
-
-    // 5. 保存或获取 Dish 记录
+    // 4. 保存或获取 Dish 记录
+    // 注意：Prisma Client 会自动管理连接池，无需手动初始化
     const dishRecord = await saveDish(dish as DishRecommendation);
 
-    // 6. 准备 Recipe 数据映射（如果提供了 recipeDataMap）
+    // 5. 准备 Recipe 数据映射（如果提供了 recipeDataMap）
     // recipeDataMap 是从前端传来的对象，格式: { [recipeId]: recipeData }
     let recipeDataMapInstance: Map<string, any> | undefined;
     if (recipeDataMap && typeof recipeDataMap === 'object' && !Array.isArray(recipeDataMap)) {
@@ -268,7 +266,7 @@ export async function POST(request: NextRequest) {
       console.log(`📝 收到 Recipe 数据映射，包含 ${recipeDataMapInstance.size} 个 Recipe`);
     }
 
-    // 7. 创建套装收藏（使用去重后的 recipeIds）
+    // 6. 创建套装收藏（使用去重后的 recipeIds）
     const savedSet = await createSavedSet(
       sessionId,
       dishRecord.id,
@@ -678,19 +676,17 @@ export async function DELETE(request: NextRequest) {
       console.log(`📝 使用现有 sessionId: ${sessionId}`);
     }
 
-    // 4. 初始化数据库连接
-    await initializeDatabase();
-
-    // 5. 删除套装收藏
+    // 4. 删除套装收藏
+    // 注意：Prisma Client 会自动管理连接池，无需手动初始化
     await deleteSavedSet(sessionId, savedSetId);
 
-    // 6. 创建响应
+    // 5. 创建响应
     const response = NextResponse.json({
       success: true,
       message: '套装删除成功',
     });
 
-    // 7. 如果 sessionId 是新生成的，设置到 cookie 中
+    // 6. 如果 sessionId 是新生成的，设置到 cookie 中
     if (!hasExistingCookie) {
       setSessionCookie(response, sessionId);
       console.log(`🍪 已设置 sessionId cookie`);

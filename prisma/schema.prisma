@@ -87,6 +87,7 @@ model UserFavorite {
 
   @@unique([sessionId, recipeId])
   @@index([sessionId, recipeId])
+  @@index([sessionId, createdAt(sort: Desc)]) // 优化按时间排序的查询
   @@map("user_favorites")
 }
 
@@ -106,6 +107,7 @@ model SavedSet {
   @@unique([sessionId, dishId])
   @@index([sessionId])
   @@index([dishId])
+  @@index([sessionId, createdAt(sort: Desc)]) // 优化按时间排序的查询
   @@map("saved_sets")
 }
 

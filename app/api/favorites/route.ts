@@ -49,10 +49,8 @@ export async function POST(request: NextRequest) {
       console.log(`📝 使用现有 sessionId: ${sessionId}`);
     }
 
-    // 3. 初始化数据库连接
-    await initializeDatabase();
-
-    // 4. 验证 recipeId 是否存在（查询 recipes 表）
+    // 3. 验证 recipeId 是否存在（查询 recipes 表）
+    // 注意：Prisma Client 会自动管理连接池，无需手动初始化
     let recipe = await prisma.recipe.findUnique({
       where: { id: recipeId }
     });
@@ -373,7 +371,7 @@ export async function DELETE(request: NextRequest) {
     console.log(`🗑️ 收到取消收藏请求，recipeId: ${recipeId}`);
 
     // 3. 获取或生成 sessionId
-    let sessionId = getSessionIdFromRequest(request);
+    const sessionId = getSessionIdFromRequest(request);
     const hasExistingCookie = request.cookies.has('session_id');
 
     // 如果没有现有cookie，说明是新生成的sessionId
@@ -383,10 +381,7 @@ export async function DELETE(request: NextRequest) {
       console.log(`📝 使用现有 sessionId: ${sessionId}`);
     }
 
-    // 4. 初始化数据库连接
-    await initializeDatabase();
-
-    // 5. 查询并删除匹配的收藏记录（同时匹配sessionId和recipeId）
+    // 4. 查询并删除匹配的收藏记录（同时匹配sessionId和recipeId）
     // 安全考虑：确保只能删除自己的收藏（通过sessionId验证）
     // 先查找收藏记录
     const favorite = await prisma.userFavorite.findUnique({
@@ -398,7 +393,7 @@ export async function DELETE(request: NextRequest) {
       }
     });
 
-    // 6. 检查是否找到记录（如果不存在，返回友好提示）
+    // 5. 检查是否找到记录（如果不存在，返回友好提示）
     if (!favorite) {
       console.log(`⚠️ 收藏记录不存在，recipeId: ${recipeId}, sessionId: ${sessionId}`);
       return NextResponse.json(
@@ -410,7 +405,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 7. 删除收藏记录
+    // 6. 删除收藏记录
     await prisma.userFavorite.delete({
       where: {
         id: favorite.id
@@ -418,7 +413,7 @@ export async function DELETE(request: NextRequest) {
     });
     console.log(`✅ 取消收藏成功，favoriteId: ${favorite.id}`);
 
-    // 8. 创建响应
+    // 7. 创建响应
     const response = NextResponse.json({
       success: true,
       message: '取消收藏成功',
