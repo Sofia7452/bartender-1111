@@ -1,28 +1,74 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useStreamingRecommendation } from '../../hooks/useStreamingRecommendation';
-import { StreamingRecipeCard } from './StreamingRecipeCard';
+import { RecipeCard } from './RecipeCard';
 import { Button } from '../ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
 import { IngredientInput } from './IngredientInput';
 
 interface Recipe {
-  id?: string;
+  id: string;
   name: string;
   description: string;
   ingredients: string[];
   steps: string[];
   difficulty: number;
   estimatedTime: number;
+  category?: string;
+  glassType?: string;
+  technique?: string;
+  garnish?: string;
 }
 
 interface StreamingRecommendationViewProps {
   onComplete?: (recommendations: Recipe[]) => void;
 }
 
+// 动画包装组件
+interface AnimatedRecipeCardProps {
+  recipe: Recipe;
+  animationDelay: number;
+  isFavorited: boolean;
+  onFavorite: (recipeId: string, isFavorited: boolean) => void;
+}
+
+function AnimatedRecipeCard({ recipe, animationDelay, isFavorited, onFavorite }: AnimatedRecipeCardProps) {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, animationDelay);
+
+    return () => clearTimeout(timer);
+  }, [animationDelay]);
+
+  console.log('AnimatedRecipeCard 渲染:', { 
+    recipeId: recipe.id, 
+    recipeName: recipe.name,
+    isFavorited 
+  });
+
+  return (
+    <div
+      className={`transform transition-all duration-500 ${
+        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+      }`}
+    >
+      <RecipeCard
+        recipe={recipe}
+        isFavorited={isFavorited}
+        onFavorite={onFavorite}
+        onViewDetails={(id) => console.log('查看详情:', id)}
+      />
+    </div>
+  );
+}
+
 export function StreamingRecommendationView({ onComplete }: StreamingRecommendationViewProps) {
   const [ingredients, setIngredients] = useState<string[]>([]);
+  const [favoritedRecipes, setFavoritedRecipes] = useState<Set<string>>(new Set());
 
   const {
     isStreaming,
@@ -35,7 +81,16 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
   } = useStreamingRecommendation({
     onComplete: (recs) => {
       console.log('✅ 流式推荐完成:', recs);
-      onComplete?.(recs);
+      // 转换类型以匹配 Recipe 接口
+      const convertedRecs = recs.map((rec) => ({
+        ...rec,
+        id: rec.id || crypto.randomUUID(),
+        category: '',
+        glassType: '',
+        technique: '',
+        garnish: undefined,
+      }));
+      onComplete?.(convertedRecs);
     },
     onError: (err) => {
       console.error('❌ 流式推荐错误:', err);
@@ -49,7 +104,35 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
   const handleReset = () => {
     reset();
     setIngredients([]);
+    setFavoritedRecipes(new Set());
   };
+
+  const handleFavorite = (recipeId: string, isFavorited: boolean) => {
+    console.log('收藏状态变化:', { recipeId, isFavorited });
+    setFavoritedRecipes((prev) => {
+      const newSet = new Set(prev);
+      if (isFavorited) {
+        newSet.add(recipeId);
+      } else {
+        newSet.delete(recipeId);
+      }
+      console.log('更新后的收藏列表:', Array.from(newSet));
+      return newSet;
+    });
+  };
+
+  // 转换推荐结果为完整的 Recipe 类型
+  // 使用 useMemo 确保 ID 稳定，不会每次渲染都重新生成
+  const convertedRecommendations: Recipe[] = useMemo(() => {
+    return recommendations.map((rec) => ({
+      ...rec,
+      id: rec.id || crypto.randomUUID(),
+      category: '',
+      glassType: '',
+      technique: '',
+      garnish: undefined,
+    }));
+  }, [recommendations]);
 
   return (
     <div className="space-y-6">
@@ -136,7 +219,7 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
       )}
 
       {/* 推荐结果 */}
-      {recommendations.length > 0 && (
+      {convertedRecommendations.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-bold text-gray-900">
@@ -146,25 +229,35 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
               <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span>共 {recommendations.length} 个配方</span>
+              <span>共 {convertedRecommendations.length} 个配方</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {recommendations.map((recipe, index) => (
-              <StreamingRecipeCard
-                key={recipe.id || index}
-                recipe={recipe}
-                isStreaming={isStreaming}
-                animationDelay={index * 200}
-              />
-            ))}
+            {convertedRecommendations.map((recipe, index) => {
+              const isFav = favoritedRecipes.has(recipe.id);
+              console.log('渲染配方卡片:', { 
+                recipeId: recipe.id, 
+                recipeName: recipe.name,
+                isFavorited: isFav,
+                favoritedRecipesSize: favoritedRecipes.size 
+              });
+              return (
+                <AnimatedRecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  animationDelay={index * 200}
+                  isFavorited={isFav}
+                  onFavorite={handleFavorite}
+                />
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* 空状态 */}
-      {!isStreaming && recommendations.length === 0 && !error && ingredients.length === 0 && (
+      {!isStreaming && convertedRecommendations.length === 0 && !error && ingredients.length === 0 && (
         <div className="text-center py-12">
           <div className="text-6xl mb-4">⚡</div>
           <h3 className="text-xl font-semibold text-gray-900 mb-2">
