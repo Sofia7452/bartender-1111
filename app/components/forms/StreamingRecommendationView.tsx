@@ -135,69 +135,76 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
   }, [recommendations]);
 
   return (
-    <div className="space-y-6">
+    <>
       {/* 输入区域 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>🍹 流式推荐模式</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+      <div className="max-w-2xl mx-auto mb-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>输入您的原料</CardTitle>
+          </CardHeader>
+          <CardContent>
             <IngredientInput
               value={ingredients}
               onChange={setIngredients}
               placeholder="输入原料名称，如：威士忌、柠檬、糖浆..."
               maxIngredients={8}
             />
+          </CardContent>
+        </Card>
+      </div>
 
-            <div className="flex gap-3">
-              <Button
-                onClick={handleStart}
-                disabled={ingredients.length === 0 || isStreaming}
-                loading={isStreaming}
-                className="flex-1"
-              >
-                {isStreaming ? '正在生成推荐...' : '开始流式推荐'}
-              </Button>
-
-              {(recommendations.length > 0 || error) && (
-                <Button
-                  onClick={handleReset}
-                  variant="outline"
-                  disabled={isStreaming}
-                >
-                  重置
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 推荐按钮 */}
+      <div className="text-center mb-8">
+        <Button
+          onClick={handleStart}
+          disabled={ingredients.length === 0 || isStreaming}
+          loading={isStreaming}
+          size="lg"
+          className="px-8 py-3"
+        >
+          {isStreaming ? '正在生成推荐...' : '开始流式推荐'}
+        </Button>
+        
+        {(recommendations.length > 0 || error) && (
+          <Button
+            onClick={handleReset}
+            variant="outline"
+            disabled={isStreaming}
+            className="ml-3"
+          >
+            重置
+          </Button>
+        )}
+      </div>
 
       {/* 实时内容预览（无缓存时显示） */}
       {!isCacheHit && streamedContent && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">实时内容预览</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
-              {streamedContent}
-            </pre>
-          </CardContent>
-        </Card>
+        <div className="max-w-2xl mx-auto mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">实时内容预览</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
+                {streamedContent}
+              </pre>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* 缓存命中提示 */}
       {isCacheHit && recommendations.length > 0 && (
-        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <div>
-              <h4 className="text-sm font-semibold text-green-800">缓存命中</h4>
-              <p className="text-sm text-green-600 mt-1">使用了之前的推荐结果，响应更快</p>
+        <div className="max-w-2xl mx-auto mb-8">
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <div>
+                <h4 className="text-sm font-semibold text-green-800">缓存命中</h4>
+                <p className="text-sm text-green-600 mt-1">使用了之前的推荐结果，响应更快</p>
+              </div>
             </div>
           </div>
         </div>
@@ -205,14 +212,16 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
 
       {/* 错误提示 */}
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div>
-              <h4 className="text-sm font-semibold text-red-800">推荐失败</h4>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
+        <div className="max-w-2xl mx-auto mb-8">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <h4 className="text-sm font-semibold text-red-800">推荐失败</h4>
+                <p className="text-sm text-red-600 mt-1">{error}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -220,19 +229,10 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
 
       {/* 推荐结果 */}
       {convertedRecommendations.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-gray-900">
-              为您推荐以下配方
-            </h3>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>共 {convertedRecommendations.length} 个配方</span>
-            </div>
-          </div>
-
+        <div className="space-y-6">
+          <h2 className="text-2xl font-bold text-gray-900 text-center">
+            为您推荐以下配方
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {convertedRecommendations.map((recipe, index) => {
               const isFav = favoritedRecipes.has(recipe.id);
@@ -268,6 +268,6 @@ export function StreamingRecommendationView({ onComplete }: StreamingRecommendat
           </p>
         </div>
       )}
-    </div>
+    </>
   );
 }

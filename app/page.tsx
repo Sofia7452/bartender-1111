@@ -359,24 +359,21 @@ export default function Home() {
           </>
         ) : (
           <>
-            {/* 推荐模式切换（仅在未启用搭配模式时显示） */}
-            <div className="max-w-2xl mx-auto mb-6">
-              <RecommendationModeToggle
-                mode={recommendationMode}
-                onChange={(mode) => {
-                  setRecommendationMode(mode);
-                  // 切换模式时清空结果和错误
-                  setRecommendations([]);
-                  setError(null);
-                }}
-                disabled={isLoading || (ragEnabled || flowchartEnabled)}
-              />
-              {(ragEnabled || flowchartEnabled) && (
-                <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                  ⚠️ 流式模式暂不支持 RAG 增强和流程图生成，请使用标准模式
-                </div>
-              )}
-            </div>
+            {/* 推荐模式切换（仅在纯 LLM 模式下显示） */}
+            {!ragEnabled && !flowchartEnabled && (
+              <div className="max-w-2xl mx-auto mb-6">
+                <RecommendationModeToggle
+                  mode={recommendationMode}
+                  onChange={(mode) => {
+                    setRecommendationMode(mode);
+                    // 切换模式时清空结果和错误
+                    setRecommendations([]);
+                    setError(null);
+                  }}
+                  disabled={isLoading}
+                />
+              </div>
+            )}
 
             {/* 根据模式显示不同的推荐界面 */}
             {recommendationMode === 'streaming' && !ragEnabled && !flowchartEnabled ? (
