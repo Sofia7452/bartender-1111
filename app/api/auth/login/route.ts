@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     // 2. 参数验证
     const validationResult = loginSchema.safeParse(body);
     if (!validationResult.success) {
-      const errors = validationResult.error.errors.map(e => e.message);
+      const errors = validationResult.error.issues.map(e => e.message);
       return NextResponse.json(
         { success: false, error: errors[0], details: errors },
         { status: 400 }

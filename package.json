@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
     "postinstall": "prisma generate --no-engine",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
     "test:auth": "npx tsx scripts/test-auth.ts",
     "db:migrate": "prisma migrate dev",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@antv/mcp-server-chart": "^0.9.1",
