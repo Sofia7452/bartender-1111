@@ -15,10 +15,67 @@ datasource db {
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
-  posts Post[]
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  password  String?  // 密码哈希，可选（支持匿名用户升级为注册用户）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  posts     Post[]
+
+  // 用户收藏关联（登录用户的收藏）
+  favorites AuthUserFavorite[]
+  savedSets AuthUserSavedSet[]
+}
+
+// 登录用户的收藏（与匿名用户的 UserFavorite 区分）
+model AuthUserFavorite {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    Int
+  recipeId  String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, recipeId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("auth_user_favorites")
+}
+
+// 登录用户的套装收藏
+model AuthUserSavedSet {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      Int
+  dishId      String   @db.Uuid
+  name        String?  @db.VarChar(255)
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dish    Dish                   @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  recipes AuthUserSavedSetRecipe[]
+
+  @@unique([userId, dishId])
+  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("auth_user_saved_sets")
+}
+
+model AuthUserSavedSetRecipe {
+  id         String   @id @default(uuid()) @db.Uuid
+  savedSetId String   @db.Uuid
+  recipeId   String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  savedSet AuthUserSavedSet @relation(fields: [savedSetId], references: [id], onDelete: Cascade)
+  recipe   Recipe           @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([savedSetId, recipeId])
+  @@index([savedSetId])
+  @@index([recipeId])
+  @@map("auth_user_saved_set_recipes")
 }
 
 model Post {
@@ -45,7 +102,8 @@ model Dish {
   updatedAt           DateTime @updatedAt
 
   // 关联关系
-  savedSets SavedSet[]
+  savedSets         SavedSet[]
+  authUserSavedSets AuthUserSavedSet[]
 
   @@index([name])
   @@index([cuisine])
@@ -70,8 +128,10 @@ model Recipe {
   updatedAt     DateTime @updatedAt
 
   // 关联关系
-  favorites       UserFavorite[]
-  savedSetRecipes SavedSetRecipe[]
+  favorites              UserFavorite[]
+  savedSetRecipes        SavedSetRecipe[]
+  authUserFavorites      AuthUserFavorite[]
+  authUserSavedSetRecipes AuthUserSavedSetRecipe[]
 
   @@map("recipes")
 }

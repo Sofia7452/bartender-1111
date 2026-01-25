@@ -1,6 +1,9 @@
+'use client';
+
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '../ui/Button';
+import UserStatus from '../auth/UserStatus';
 
 interface HeaderProps {
   className?: string;
@@ -32,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({ className = '' }) => {
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex space-x-8">
+          <nav className="hidden md:flex items-center space-x-8">
             <Link
               href="/"
               className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -58,6 +61,11 @@ export const Header: React.FC<HeaderProps> = ({ className = '' }) => {
             >
               设置
             </Link> */}
+            
+            {/* 用户状态 */}
+            <div className="border-l border-gray-200 pl-6 ml-2">
+              <UserStatus />
+            </div>
           </nav>
 
           {/* Mobile menu button */}
@@ -115,6 +123,11 @@ export const Header: React.FC<HeaderProps> = ({ className = '' }) => {
                 设置
               </Link> */}
             </nav>
+            
+            {/* 移动端用户状态 */}
+            <div className="border-t border-gray-200 px-4 py-3">
+              <UserStatus />
+            </div>
           </div>
         )}
       </div>
