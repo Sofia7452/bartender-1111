@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { env } from '../lib/env';
+import { getLLMCache } from '../lib/llmCache';
 
 interface LLMConfig {
   apiKey: string;
@@ -15,8 +16,11 @@ interface CacheEntry {
 export class LLMService {
   private openai: OpenAI;
   private config: LLMConfig;
-  private cache: Map<string, CacheEntry>;
+  // 保留内存缓存作为降级方案（L1 缓存）
+  private memoryCache: Map<string, CacheEntry>;
   private readonly CACHE_TTL: number = 30 * 60 * 1000; // 30分钟
+  // Redis 缓存（L2 缓存，跨实例共享）
+  private redisCache = getLLMCache();
 
   constructor(config?: Partial<LLMConfig>) {
     this.config = {
@@ -30,7 +34,7 @@ export class LLMService {
       baseURL: this.config.baseURL,
     });
 
-    this.cache = new Map<string, CacheEntry>();
+    this.memoryCache = new Map<string, CacheEntry>();
   }
 
   // 缓存键生成：排序原料、转小写、逗号分隔
@@ -38,55 +42,101 @@ export class LLMService {
     return ingredients.map(i => i.toLowerCase()).sort().join(',');
   }
 
-  // 从缓存获取结果
-  private getFromCache(ingredients: string[]): any[] | null {
+  // 从缓存获取结果（双层缓存：L1 内存 + L2 Redis）
+  private async getFromCache(ingredients: string[]): Promise<{ data: any[] | null; source: 'memory' | 'redis' | 'none' }> {
     const key = this.getCacheKey(ingredients);
-    const cached = this.cache.get(key);
-
-    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      console.log('使用缓存结果');
-      return cached.data;
+    
+    // L1: 检查内存缓存（快速路径）
+    const memoryCached = this.memoryCache.get(key);
+    if (memoryCached && Date.now() - memoryCached.timestamp < this.CACHE_TTL) {
+      console.log('✅ [L1 Cache] 内存缓存命中');
+      return { data: memoryCached.data, source: 'memory' };
     }
 
-    // 清理过期缓存
-    if (cached) {
-      this.cache.delete(key);
+    // 清理过期的内存缓存
+    if (memoryCached) {
+      this.memoryCache.delete(key);
     }
 
-    return null;
+    // L2: 检查 Redis 缓存（跨实例共享）
+    try {
+      const redisData = await this.redisCache.get(ingredients);
+      if (redisData) {
+        // 将 Redis 缓存回填到内存缓存（提升下次访问速度）
+        this.memoryCache.set(key, {
+          data: redisData,
+          timestamp: Date.now()
+        });
+        console.log('✅ [L2 Cache] Redis 缓存命中并回填内存');
+        return { data: redisData, source: 'redis' };
+      }
+    } catch (error) {
+      console.error('⚠️ [L2 Cache] Redis 读取失败，降级到无缓存:', error);
+    }
+
+    return { data: null, source: 'none' };
   }
 
-  // 保存结果到缓存
-  private saveToCache(ingredients: string[], data: any[]): void {
+  // 保存结果到缓存（双写：内存 + Redis）
+  private async saveToCache(ingredients: string[], data: any[]): Promise<void> {
     const key = this.getCacheKey(ingredients);
-    this.cache.set(key, {
+    
+    // 保存到内存缓存（L1）
+    this.memoryCache.set(key, {
       data,
       timestamp: Date.now()
     });
-    console.log('缓存已保存');
+    console.log('💾 [L1 Cache] 内存缓存已保存');
+
+    // 保存到 Redis 缓存（L2）
+    try {
+      await this.redisCache.set(ingredients, data);
+    } catch (error) {
+      console.error('⚠️ [L2 Cache] Redis 写入失败:', error);
+      // Redis 写入失败不影响业务逻辑，内存缓存仍然可用
+    }
   }
 
   // 清空所有缓存
-  clearCache(): void {
-    this.cache.clear();
-    console.log('缓存已清空');
+  async clearCache(): Promise<void> {
+    this.memoryCache.clear();
+    console.log('🗑️ [L1 Cache] 内存缓存已清空');
+    
+    try {
+      const count = await this.redisCache.clearAll();
+      console.log(`🗑️ [L2 Cache] Redis 缓存已清空 (${count} 个)`);
+    } catch (error) {
+      console.error('⚠️ [L2 Cache] Redis 清空失败:', error);
+    }
   }
 
   // 获取缓存统计信息
-  getCacheStats(): { size: number; keys: string[] } {
+  async getCacheStats(): Promise<{ memory: { size: number; keys: string[] }; redis: { totalKeys: number; keys: string[] } }> {
+    const memoryStats = {
+      size: this.memoryCache.size,
+      keys: Array.from(this.memoryCache.keys())
+    };
+
+    let redisStats = { totalKeys: 0, keys: [] as string[] };
+    try {
+      redisStats = await this.redisCache.getStats();
+    } catch (error) {
+      console.error('⚠️ 获取 Redis 统计信息失败:', error);
+    }
+
     return {
-      size: this.cache.size,
-      keys: Array.from(this.cache.keys())
+      memory: memoryStats,
+      redis: redisStats
     };
   }
 
   // 生成鸡尾酒推荐
-  async generateRecommendations(ingredients: string[]): Promise<any[]> {
+  async generateRecommendations(ingredients: string[], customPrompt?: string): Promise<any[]> {
     try {
-      // 检查缓存
-      const cachedResult = this.getFromCache(ingredients);
-      if (cachedResult !== null) {
-        console.log('使用缓存结果');
+      // 检查双层缓存
+      const { data: cachedResult, source } = await this.getFromCache(ingredients);
+      if (cachedResult !== null && !customPrompt) {
+        console.log(`✅ 缓存命中 (source: ${source})`);
         return cachedResult;
       }
 
@@ -95,7 +145,7 @@ export class LLMService {
         throw new Error('OPENAI_API_KEY 未配置或无效。请在环境变量中配置有效的 OpenAI API 密钥。');
       }
 
-      const prompt = this.buildRecommendationPrompt(ingredients);
+      const prompt = customPrompt || this.buildRecommendationPrompt(ingredients);
 
       const response = await this.openai.chat.completions.create({
         model: this.config.model,
@@ -120,8 +170,8 @@ export class LLMService {
 
       const recommendations = this.parseRecommendations(content);
       
-      // 保存到缓存
-      this.saveToCache(ingredients, recommendations);
+      // 保存到双层缓存
+      await this.saveToCache(ingredients, recommendations);
 
       return recommendations;
     } catch (error: any) {
@@ -256,13 +306,14 @@ export class LLMService {
   // 生成鸡尾酒推荐（流式）
   async generateRecommendationsStream(
     ingredients: string[],
-    onChunk: (chunk: string, isCacheHit?: boolean) => void
+    onChunk: (chunk: string, isCacheHit?: boolean) => void,
+    customPrompt?: string
   ): Promise<any[]> {
     try {
-      // 检查缓存
-      const cachedResult = this.getFromCache(ingredients);
-      if (cachedResult !== null) {
-        console.log('使用缓存结果（流式模拟）');
+      // 检查双层缓存
+      const { data: cachedResult, source } = await this.getFromCache(ingredients);
+      if (cachedResult !== null && !customPrompt) {
+        console.log(`✅ 缓存命中（流式模拟, source: ${source}）`);
         // 发送缓存标识
         onChunk('', true);
         // 模拟流式输出：将缓存的 JSON 字符串分块发送
@@ -282,7 +333,7 @@ export class LLMService {
         throw new Error('OPENAI_API_KEY 未配置或无效。请在环境变量中配置有效的 OpenAI API 密钥。');
       }
 
-      const prompt = this.buildRecommendationPrompt(ingredients);
+      const prompt = customPrompt || this.buildRecommendationPrompt(ingredients);
 
       // 启用流式响应
       const response = await this.openai.chat.completions.create({
@@ -318,8 +369,8 @@ export class LLMService {
 
       const recommendations = this.parseRecommendations(fullContent);
       
-      // 保存到缓存
-      this.saveToCache(ingredients, recommendations);
+      // 保存到双层缓存
+      await this.saveToCache(ingredients, recommendations);
 
       return recommendations;
     } catch (error: any) {

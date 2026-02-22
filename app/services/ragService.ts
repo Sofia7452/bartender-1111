@@ -266,10 +266,15 @@ function getEmbeddings() {
   console.log("[RAG] Initializing embeddings model...");
 
   // 1. 优先使用 OpenAI Embeddings（最稳定）
-  if (process.env.OPENAI_API_KEY) {
+  if (process.env.EMBEDDINGS_API_KEY) {
     console.log("[RAG] Using OpenAI embeddings (text-embedding-3-small)...");
     const embeddings = new OpenAIEmbeddings({
-      model: "text-embedding-3-small", // 更小、更快、更便宜
+      model: process.env.EMBEDDINGS_MODEL, // 更小、更快、更便宜
+      openAIApiKey: process.env.EMBEDDINGS_API_KEY,
+      configuration: {
+        baseURL: process.env.EMBEDDINGS_BASE_URL,
+      },
+      batchSize: 10, 
       maxRetries: 3,
       timeout: 30000,
     });

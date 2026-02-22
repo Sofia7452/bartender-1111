@@ -49,67 +49,7 @@ export async function POST(request: NextRequest) {
       console.log(`📝 使用现有 sessionId: ${sessionId}`);
     }
 
-    // 3. 验证 recipeId 是否存在（查询 recipes 表）
-    // 注意：Prisma Client 会自动管理连接池，无需手动初始化
-    let recipe = await prisma.recipe.findUnique({
-      where: { id: recipeId }
-    });
-
-    // 5. 如果Recipe不存在，但提供了recipeData，则创建Recipe记录
-    // 注意：Recipe 是共享资源，可以被两类收藏关系使用：
-    // - UserFavorite（单独收藏，通过此 API）
-    // - SavedSetRecipe（套装收藏中的酒品，通过 /api/saved-sets）
-    // 因此，创建 Recipe 是合理的，它会被两类关系共享使用
-    if (!recipe && recipeData) {
-      console.log(`📝 配方不存在，使用传入的Recipe数据创建新配方，recipeId: ${recipeId}`);
-      try {
-        // 创建Recipe记录（使用传入的recipeId和recipeData）
-        // 这个 Recipe 可以被单独收藏（UserFavorite）和套装收藏（SavedSetRecipe）共享使用
-        recipe = await prisma.recipe.create({
-          data: {
-            id: recipeId, // 使用传入的recipeId
-            name: recipeData.name || '未知配方',
-            description: recipeData.description || null,
-            ingredients: recipeData.ingredients || [],
-            steps: recipeData.steps || [],
-            difficulty: recipeData.difficulty ?? 1,
-            estimatedTime: recipeData.estimatedTime ?? 0,
-            source: recipeData.source || null,
-            category: recipeData.category || null,
-            glassType: recipeData.glassType || null,
-            technique: recipeData.technique || null,
-            garnish: recipeData.garnish || null,
-            notes: recipeData.notes || null,
-          }
-        });
-        console.log(`✅ 成功创建新配方，recipeId: ${recipeId}`);
-      } catch (error) {
-        console.error(`❌ 创建配方失败，recipeId: ${recipeId}`, error);
-        return NextResponse.json(
-          {
-            success: false,
-            error: '创建配方失败',
-            details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
-          },
-          { status: 500 }
-        );
-      }
-    }
-
-    // 6. 如果Recipe仍然不存在，返回错误
-    if (!recipe) {
-      console.error(`❌ 配方不存在，recipeId: ${recipeId}，且未提供Recipe数据`);
-      return NextResponse.json(
-        {
-          success: false,
-          error: '配方不存在',
-          details: '如果配方不存在，请提供完整的Recipe数据（recipeData字段）以自动创建配方'
-        },
-        { status: 404 }
-      );
-    }
-
-    // 7. 检查是否已收藏（防止重复收藏）
+    // 3. 检查是否已收藏（防止重复收藏 - 提前检查避免不必要的事务）
     const existingFavorite = await prisma.userFavorite.findUnique({
       where: {
         sessionId_recipeId: {
@@ -136,16 +76,138 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 8. 创建新的 UserFavorite 记录
-    const savedFavorite = await prisma.userFavorite.create({
-      data: {
-        sessionId,
-        recipeId
-      }
+    // 4. 验证 recipeId 是否存在（查询 recipes 表）
+    // 注意：Prisma Client 会自动管理连接池，无需手动初始化
+    let recipe = await prisma.recipe.findUnique({
+      where: { id: recipeId }
     });
-    console.log(`✅ 收藏成功，favoriteId: ${savedFavorite.id}`);
 
-    // 9. 创建响应并设置 cookie
+    let savedFavorite;
+
+    // 5. 如果 Recipe 不存在，但提供了 recipeData，使用事务同时创建 Recipe 和 UserFavorite
+    // 注意：Recipe 是共享资源，可以被两类收藏关系使用：
+    // - UserFavorite（单独收藏，通过此 API）
+    // - SavedSetRecipe（套装收藏中的酒品，通过 /api/saved-sets）
+    // 因此，创建 Recipe 是合理的，它会被两类关系共享使用
+    if (!recipe && recipeData) {
+      console.log(`📝 配方不存在，使用事务创建 Recipe 和 UserFavorite，recipeId: ${recipeId}`);
+      
+      try {
+        // 🔒 使用事务确保原子性：Recipe 和 UserFavorite 必须同时创建成功
+        const result = await prisma.$transaction(async (tx) => {
+          // 创建 Recipe 记录（使用传入的 recipeId 和 recipeData）
+          // 这个 Recipe 可以被单独收藏（UserFavorite）和套装收藏（SavedSetRecipe）共享使用
+          const newRecipe = await tx.recipe.create({
+            data: {
+              id: recipeId, // 使用传入的 recipeId
+              name: recipeData.name || '未知配方',
+              description: recipeData.description || null,
+              ingredients: recipeData.ingredients || [],
+              steps: recipeData.steps || [],
+              difficulty: recipeData.difficulty ?? 1,
+              estimatedTime: recipeData.estimatedTime ?? 0,
+              source: recipeData.source || null,
+              category: recipeData.category || null,
+              glassType: recipeData.glassType || null,
+              technique: recipeData.technique || null,
+              garnish: recipeData.garnish || null,
+              notes: recipeData.notes || null,
+            }
+          });
+
+          // 创建 UserFavorite 收藏记录
+          const newFavorite = await tx.userFavorite.create({
+            data: {
+              sessionId,
+              recipeId
+            }
+          });
+
+          return { recipe: newRecipe, favorite: newFavorite };
+        });
+
+        recipe = result.recipe;
+        savedFavorite = result.favorite;
+        console.log(`✅ 事务成功：创建配方和收藏记录，recipeId: ${recipeId}, favoriteId: ${savedFavorite.id}`);
+
+      } catch (error) {
+        console.error(`❌ 事务失败：创建配方或收藏记录失败，recipeId: ${recipeId}`, error);
+        
+        // 处理事务中的唯一约束冲突（并发情况下，可能有其他请求同时创建了相同的收藏）
+        if (error instanceof Error) {
+          if (error.message.includes('duplicate key') || error.message.includes('UNIQUE constraint')) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: '该配方已收藏'
+              },
+              { status: 409 }
+            );
+          }
+        }
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: '创建配方或收藏失败',
+            details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+          },
+          { status: 500 }
+        );
+      }
+    } 
+    // 6. 如果 Recipe 已存在，直接创建 UserFavorite（无需事务，因为只有一个写操作）
+    else if (recipe) {
+      console.log(`📦 配方已存在，直接创建收藏记录，recipeId: ${recipeId}`);
+      
+      try {
+        savedFavorite = await prisma.userFavorite.create({
+          data: {
+            sessionId,
+            recipeId
+          }
+        });
+        console.log(`✅ 收藏成功，favoriteId: ${savedFavorite.id}`);
+      } catch (error) {
+        console.error(`❌ 创建收藏记录失败，recipeId: ${recipeId}`, error);
+        
+        // 处理唯一约束冲突（并发情况）
+        if (error instanceof Error) {
+          if (error.message.includes('duplicate key') || error.message.includes('UNIQUE constraint')) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: '该配方已收藏'
+              },
+              { status: 409 }
+            );
+          }
+        }
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: '创建收藏失败',
+            details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+          },
+          { status: 500 }
+        );
+      }
+    } 
+    // 7. 如果 Recipe 不存在且未提供 recipeData，返回错误
+    else {
+      console.error(`❌ 配方不存在，recipeId: ${recipeId}，且未提供 Recipe 数据`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: '配方不存在',
+          details: '如果配方不存在，请提供完整的 Recipe 数据（recipeData 字段）以自动创建配方'
+        },
+        { status: 404 }
+      );
+    }
+
+    // 8. 创建响应并设置 cookie
     const response = NextResponse.json({
       success: true,
       favorite: {
@@ -170,22 +232,9 @@ export async function POST(request: NextRequest) {
     return response;
 
   } catch (error) {
-    console.error('收藏API错误:', error);
+    console.error('收藏 API 错误:', error);
 
-    // 处理数据库唯一索引约束错误（已收藏的情况）
-    if (error instanceof Error) {
-      // PostgreSQL 唯一约束违反错误
-      if (error.message.includes('duplicate key') || error.message.includes('UNIQUE constraint')) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: '该配方已收藏'
-          },
-          { status: 409 }
-        );
-      }
-    }
-
+    // 通用错误处理（前面已经处理了具体的错误情况）
     return NextResponse.json(
       {
         success: false,

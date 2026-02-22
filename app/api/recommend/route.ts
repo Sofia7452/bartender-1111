@@ -74,7 +74,7 @@ ${ragContext}
 4. 返回有效的JSON数组格式`;
 
           // 使用增强的提示词重新生成推荐
-          const enhancedResponse = await llmService.generateRecommendations(ingredients);
+          const enhancedResponse = await llmService.generateRecommendations(ingredients, enhancedPrompt);
           enhancedRecommendations = enhancedResponse;
         } else {
           console.warn('RAG检索未找到相关内容，使用纯LLM推荐');
