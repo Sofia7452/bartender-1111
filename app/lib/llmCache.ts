@@ -23,23 +23,39 @@ export class LLMCacheService {
 
   /**
    * 生成缓存键：排序原料、转小写、逗号分隔
+   * @param ingredients 原料列表
+   * @param options 其他影响输出的参数（如 RAG 开关、模型等）
    */
-  private getCacheKey(ingredients: string[]): string {
+  private getCacheKey(ingredients: string[], options?: Record<string, any>): string {
     const normalized = ingredients
       .map(i => i.toLowerCase().trim())
       .sort()
       .join(',');
-    return `${this.CACHE_PREFIX}:${normalized}`;
+    
+    let key = `${this.CACHE_PREFIX}:${normalized}`;
+    
+    if (options) {
+      const optionKeys = Object.keys(options).sort();
+      const optionStr = optionKeys
+        .map(k => `${k}:${options[k]}`)
+        .join('|');
+      if (optionStr) {
+        key += `:opts[${optionStr}]`;
+      }
+    }
+    
+    return key;
   }
 
   /**
    * 从 Redis 获取缓存
    * @param ingredients 原料列表
+   * @param options 可选配置参数
    * @returns 缓存的推荐结果，未命中返回 null
    */
-  async get(ingredients: string[]): Promise<any[] | null> {
+  async get(ingredients: string[], options?: Record<string, any>): Promise<any[] | null> {
     try {
-      const key = this.getCacheKey(ingredients);
+      const key = this.getCacheKey(ingredients, options);
       const cached = await kv.get<CacheEntry>(key);
 
       if (!cached) {
@@ -59,10 +75,11 @@ export class LLMCacheService {
    * 保存结果到 Redis
    * @param ingredients 原料列表
    * @param data 推荐结果
+   * @param options 可选配置参数
    */
-  async set(ingredients: string[], data: any[]): Promise<void> {
+  async set(ingredients: string[], data: any[], options?: Record<string, any>): Promise<void> {
     try {
-      const key = this.getCacheKey(ingredients);
+      const key = this.getCacheKey(ingredients, options);
       const entry: CacheEntry = {
         data,
         timestamp: Date.now(),

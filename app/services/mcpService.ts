@@ -197,93 +197,45 @@ export class MCPService {
         }
       }
 
-      // 3. 构建流程图参数（严格遵循 mcp-server-chart 格式）
+      // 3. 根据传入的 data 动态构建流程图参数
       console.log('📝 构建 MCP 请求参数...');
+
+      // 优化宽高计算，基于图表的逻辑深度
+      // 深度 = 开始(1) + 准备(1) + 原料层(1) + 步骤层(N) + 结束(1)
+      const ingredientNodes = data.nodes.filter(n => n.id.startsWith('ing-'));
+      const stepNodes = data.nodes.filter(n => n.id.startsWith('step-'));
+      const logicalDepth = 1 + 1 + 1 + stepNodes.length + 1;
+      
+      // 高度：按层级计算，每层约 60px，设置 300-800px 范围
+      const dynamicHeight = Math.min(Math.max(300, logicalDepth * 60 + 50), 800);
+      
+      // 宽度：由原料的数量决定，防止过宽或过窄，设置 450-850px 范围
+      const dynamicWidth = Math.min(Math.max(450, ingredientNodes.length * 120 + 150), 850);
+
+      // 构建 id → label 映射表，MCP 用 name 同时作为标识和显示文本
+      const idToLabel = new Map(data.nodes.map(n => [n.id, n.label || n.id]));
 
       const toolArguments = {
         "data": {
-          "nodes": [
-            {
-              "name": "start",
-              "label": "开始"
-            },
-            {
-              "name": "input",
-              "label": "用户输入"
-            },
-            {
-              "name": "validate",
-              "label": "数据验证"
-            },
-            {
-              "name": "process",
-              "label": "处理数据"
-            },
-            {
-              "name": "decision",
-              "label": "是否成功？"
-            },
-            {
-              "name": "success",
-              "label": "成功处理"
-            },
-            {
-              "name": "error",
-              "label": "错误处理"
-            },
-            {
-              "name": "end",
-              "label": "结束"
-            }
-          ],
-          "edges": [
-            {
-              "source": "start",
-              "target": "input",
-              "name": "begin"
-            },
-            {
-              "source": "input",
-              "target": "validate",
-              "name": "submit"
-            },
-            {
-              "source": "validate",
-              "target": "process",
-              "name": "valid"
-            },
-            {
-              "source": "process",
-              "target": "decision",
-              "name": "check"
-            },
-            {
-              "source": "decision",
-              "target": "success",
-              "name": "yes"
-            },
-            {
-              "source": "decision",
-              "target": "error",
-              "name": "no"
-            },
-            {
-              "source": "success",
-              "target": "end",
-              "name": "complete"
-            },
-            {
-              "source": "error",
-              "target": "input",
-              "name": "retry"
-            }
-          ]
+          "nodes": data.nodes.map(node => ({
+            "name": node.label || node.id
+          })),
+          "edges": data.edges.map(edge => ({
+            "source": idToLabel.get(edge.source) || edge.source,
+            "target": idToLabel.get(edge.target) || edge.target,
+            "name": edge.label || ''
+          }))
         },
-        "style": {},
+        "style": {
+          "rankdir": "TB", // 从上到下排列
+          "nodesep": 20,   // 节点间距
+          "ranksep": 30    // 层级间距
+        },
         "theme": "default",
-        "width": 600,
-        "height": 400
-      }
+        "width": dynamicWidth,
+        "height": dynamicHeight
+      };
+
       const request: CallToolRequest = {
         method: 'tools/call',
         params: {
@@ -355,40 +307,61 @@ export class MCPService {
   // 生成鸡尾酒制作流程图（兼容旧接口）
   async generateFlowchart(data: FlowchartData): Promise<string | null> {
     try {
-      console.log('🎨 开始生成流程图（使用旧接口）...');
+      console.log('🎨 开始生成流程图...');
 
-      // 将旧格式转换为新格式
+      // 构建完整的鸡尾酒制作流程：准备原料 → 各步骤 → 完成
+      const nodes: FlowDiagramData['nodes'] = [];
+      const edges: FlowDiagramData['edges'] = [];
+
+      // 起始节点
+      nodes.push({ id: 'start', label: data.title, type: 'start' });
+
+      // 原料准备节点
+      nodes.push({ id: 'prepare', label: '准备原料', type: 'process' });
+      edges.push({ source: 'start', target: 'prepare', label: '开始制作' });
+
+      // 为每个原料创建节点，并连接到准备节点
+      data.ingredients.forEach((ing, index) => {
+        const nodeId = `ing-${index}`;
+        nodes.push({ id: nodeId, label: ing, type: 'process' });
+        edges.push({ source: 'prepare', target: nodeId });
+      });
+
+      // 步骤链：原料 → 第一步 → 第二步 → ... → 完成
+      const firstStepId = 'step-0';
+      // 所有原料节点都汇聚到第一个步骤
+      if (data.ingredients.length > 0) {
+        data.ingredients.forEach((_, index) => {
+          edges.push({ source: `ing-${index}`, target: firstStepId, label: index === 0 ? '开始调制' : '' });
+        });
+      } else {
+        edges.push({ source: 'prepare', target: firstStepId, label: '开始调制' });
+      }
+
+      // 步骤节点串联
+      data.steps.forEach((step, index) => {
+        const nodeId = `step-${index}`;
+        nodes.push({ id: nodeId, label: `${index + 1}. ${step}`, type: 'process' });
+
+        if (index > 0) {
+          edges.push({ source: `step-${index - 1}`, target: nodeId });
+        }
+      });
+
+      // 结束节点
+      nodes.push({ id: 'end', label: '制作完成', type: 'end' });
+      if (data.steps.length > 0) {
+        edges.push({ source: `step-${data.steps.length - 1}`, target: 'end', label: '出杯' });
+      }
+
       const flowDiagramData: FlowDiagramData = {
         title: data.title,
-        nodes: [
-          ...data.ingredients.map((ing, index) => ({
-            id: `ingredient-${index}`,
-            label: ing,
-            type: 'process' as const
-          })),
-          ...data.steps.map((step, index) => ({
-            id: `step-${index}`,
-            label: step,
-            type: 'process' as const
-          }))
-        ],
-        edges: [],
+        nodes,
+        edges,
         layout: 'hierarchical'
       };
 
-      // 调用新的方法
-      const imageUrl = await this.generateFlowDiagram(flowDiagramData);
-
-      // if (imageUrl) {
-      //   console.log('✅ 流程图生成成功');
-      //   // 如果是 base64 图片，转换为 Buffer
-      //   if (imageUrl.startsWith('data:image')) {
-      //     const base64Data = imageUrl.split(',')[1];
-      //     return Buffer.from(base64Data, 'base64');
-      //   }
-      // }
-
-      return imageUrl;
+      return await this.generateFlowDiagram(flowDiagramData);
     } catch (error) {
       console.error('❌ 流程图生成失败:', error);
       return null;
@@ -422,87 +395,78 @@ export class MCPService {
   // 创建流程图 SVG
   private createFlowDiagramSVG(data: FlowDiagramData): string {
     const width = 800;
-    const height = 600;
+    const nodeHeight = 40;
+    const nodeWidth = 160;
+    const verticalGap = 70;
     const margin = 50;
+    // 纵向布局：每个节点一行，从上到下排列
+    const height = Math.max(400, margin + 80 + data.nodes.length * verticalGap + margin);
 
     let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
+
+    // 箭头标记定义必须在最前面
+    svg += `<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#666"/></marker></defs>`;
 
     // 背景
     svg += `<rect width="${width}" height="${height}" fill="#f8f9fa"/>`;
 
     // 标题
-    svg += `<text x="${width / 2}" y="40" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold" fill="#333">${data.title}</text>`;
+    svg += `<text x="${width / 2}" y="40" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#333">${data.title}</text>`;
 
-    // 计算节点位置
-    const nodePositions = this.calculateNodePositions(data.nodes, width, height, margin);
-
-    // 绘制边
-    data.edges.forEach(edge => {
-      const sourcePos = nodePositions[edge.source];
-      const targetPos = nodePositions[edge.target];
-      if (sourcePos && targetPos) {
-        svg += `<line x1="${sourcePos.x}" y1="${sourcePos.y}" x2="${targetPos.x}" y2="${targetPos.y}" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>`;
-        if (edge.label) {
-          const midX = (sourcePos.x + targetPos.x) / 2;
-          const midY = (sourcePos.y + targetPos.y) / 2;
-          svg += `<text x="${midX}" y="${midY - 5}" text-anchor="middle" font-family="Arial" font-size="12" fill="#666">${edge.label}</text>`;
-        }
-      }
-    });
-
-    // 绘制节点
-    data.nodes.forEach(node => {
-      const pos = nodePositions[node.id];
-      if (pos) {
-        const nodeWidth = 120;
-        const nodeHeight = 40;
-        const x = pos.x - nodeWidth / 2;
-        const y = pos.y - nodeHeight / 2;
-
-        // 根据节点类型选择颜色
-        let fillColor = '#e3f2fd';
-        let strokeColor = '#2196f3';
-        if (node.type === 'start') {
-          fillColor = '#e8f5e8';
-          strokeColor = '#4caf50';
-        } else if (node.type === 'end') {
-          fillColor = '#ffebee';
-          strokeColor = '#f44336';
-        } else if (node.type === 'decision') {
-          fillColor = '#fff3e0';
-          strokeColor = '#ff9800';
-        }
-
-        svg += `<rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2" rx="5"/>`;
-        svg += `<text x="${pos.x}" y="${pos.y + 5}" text-anchor="middle" font-family="Arial" font-size="12" fill="#333">${node.label}</text>`;
-      }
-    });
-
-    // 添加箭头标记
-    svg += `<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#666"/></marker></defs>`;
-
-    svg += `</svg>`;
-    return svg;
-  }
-
-  // 计算节点位置
-  private calculateNodePositions(nodes: any[], width: number, height: number, margin: number): Record<string, { x: number, y: number }> {
-    const positions: Record<string, { x: number, y: number }> = {};
-    const cols = Math.ceil(Math.sqrt(nodes.length));
-    const rows = Math.ceil(nodes.length / cols);
-    const cellWidth = (width - 2 * margin) / cols;
-    const cellHeight = (height - 2 * margin - 80) / rows; // 减去标题空间
-
-    nodes.forEach((node, index) => {
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      positions[node.id] = {
-        x: margin + col * cellWidth + cellWidth / 2,
-        y: margin + 80 + row * cellHeight + cellHeight / 2
+    // 纵向布局：按节点顺序从上到下排列
+    const nodePositions: Record<string, { x: number; y: number }> = {};
+    data.nodes.forEach((node, index) => {
+      nodePositions[node.id] = {
+        x: width / 2,
+        y: margin + 80 + index * verticalGap
       };
     });
 
-    return positions;
+    // 先绘制边（线在节点下面）
+    data.edges.forEach(edge => {
+      const sourcePos = nodePositions[edge.source];
+      const targetPos = nodePositions[edge.target];
+      if (!sourcePos || !targetPos) return;
+
+      // 计算线的起止点（从节点边缘出发，而非中心，避免被节点遮挡）
+      const sy = sourcePos.y + nodeHeight / 2;
+      const ty = targetPos.y - nodeHeight / 2;
+
+      svg += `<line x1="${sourcePos.x}" y1="${sy}" x2="${targetPos.x}" y2="${ty}" stroke="#999" stroke-width="2" marker-end="url(#arrowhead)"/>`;
+      if (edge.label) {
+        const midX = (sourcePos.x + targetPos.x) / 2 + 10;
+        const midY = (sy + ty) / 2;
+        svg += `<text x="${midX}" y="${midY + 4}" text-anchor="start" font-family="Arial, sans-serif" font-size="11" fill="#888">${edge.label}</text>`;
+      }
+    });
+
+    // 再绘制节点（节点在线上面）
+    data.nodes.forEach(node => {
+      const pos = nodePositions[node.id];
+      if (!pos) return;
+
+      const x = pos.x - nodeWidth / 2;
+      const y = pos.y - nodeHeight / 2;
+
+      let fillColor = '#e3f2fd';
+      let strokeColor = '#2196f3';
+      if (node.type === 'start') {
+        fillColor = '#e8f5e9';
+        strokeColor = '#4caf50';
+      } else if (node.type === 'end') {
+        fillColor = '#fce4ec';
+        strokeColor = '#e91e63';
+      } else if (node.type === 'decision') {
+        fillColor = '#fff3e0';
+        strokeColor = '#ff9800';
+      }
+
+      svg += `<rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2" rx="8"/>`;
+      svg += `<text x="${pos.x}" y="${pos.y + 5}" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#333">${node.label}</text>`;
+    });
+
+    svg += `</svg>`;
+    return svg;
   }
 
   // 创建简单的SVG流程图

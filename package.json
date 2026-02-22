@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:all": "npx @antv/mcp-server-chart --transport streamable --port 1122 & next dev",
+    "mcp": "npx @antv/mcp-server-chart --transport streamable --port 1122",
     "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
     "postinstall": "prisma generate --no-engine",
     "start": "next start",
