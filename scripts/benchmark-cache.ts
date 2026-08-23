@@ -79,12 +79,12 @@ async function runBenchmark(concurrency: number, totalRequests: number): Promise
       
       try {
         // 检查缓存状态（通过内部 cache 检测）
-        const cacheStats = llmService.getCacheStats();
-        const cacheKeyBefore = cacheStats.size;
+        const cacheStats = await llmService.getCacheStats();
+        const cacheKeyBefore = cacheStats.memory.size;
         
         await llmService.generateRecommendations(ingredients);
         
-        const cacheKeyAfter = llmService.getCacheStats().size;
+        const cacheKeyAfter = (await llmService.getCacheStats()).memory.size;
         const isHit = cacheKeyBefore === cacheKeyAfter;
         
         if (isHit) {

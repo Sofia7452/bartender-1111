@@ -128,6 +128,11 @@ export default function FavoritesCursorPage() {
                     recipe={{
                       ...favorite.recipe,
                       id: favorite.recipeId,
+                      description: favorite.recipe.description ?? '',
+                      category: favorite.recipe.category ?? undefined,
+                      glassType: favorite.recipe.glassType ?? undefined,
+                      technique: favorite.recipe.technique ?? undefined,
+                      garnish: favorite.recipe.garnish ?? undefined,
                     }}
                     isFavorited={true}
                     onFavorite={(recipeId, isFavorited) => {

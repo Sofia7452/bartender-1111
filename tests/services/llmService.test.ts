@@ -1,32 +1,99 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { LLMService } from '../../app/services/llmService';
+
+// ---------------------------------------------------------------------------
+// Mock 声明（vitest 会把这些调用提升到 import 之前执行，保证被测模块拿到 mock）
+// ---------------------------------------------------------------------------
+
+// mock OpenAI：每个 LLMService 实例在构造时创建**独立的** create mock，
+// 并登记到 mockRegistry，由 createFreshService() 取回。
+// 这样多个 property 测试（即使共享模块级状态）之间不会互相污染
+// calls / mockResolvedValueOnce 队列——这是整文件运行时偶发
+// "expected 1 times, but got 2" / "Cannot read properties of undefined (choices)"
+// 的根因。
+const { mockRegistry } = vi.hoisted(() => ({
+  mockRegistry: { fns: [] as ReturnType<typeof vi.fn>[] },
+}));
+
+vi.mock('openai', () => ({
+  default: class MockOpenAI {
+    chat: { completions: { create: ReturnType<typeof vi.fn> } };
+
+    constructor() {
+      const create = vi.fn();
+      mockRegistry.fns.push(create);
+      this.chat = { completions: { create } };
+    }
+  },
+}));
+
+// mock @vercel/kv：走"成功路径"，避免在未配置
+// KV_REST_API_URL / KV_REST_API_TOKEN 时打印 Redis 错误日志。
+// 注意：不能使用自动 mock（keys() 返回 undefined 会让 clearAll 抛错），
+// 这里显式提供成功返回值。
+vi.mock('@vercel/kv', () => ({
+  kv: {
+    get: vi.fn().mockResolvedValue(undefined),
+    set: vi.fn().mockResolvedValue('OK'),
+    del: vi.fn().mockResolvedValue(1),
+    keys: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+// 便捷工具：构造 openai mock 响应
+function mockLLMResponse(mockCreate: any, content: unknown): void {
+  mockCreate.mockResolvedValueOnce({
+    choices: [{ message: { content: JSON.stringify(content) } }],
+  });
+}
+
+// 创建全新 LLMService 实例，并返回与其绑定的独立 openai create mock。
+// fast-check 的多轮执行与 shrink 重跑之间，共享实例的 memoryCache 和
+// mockResolvedValueOnce 队列会发生状态泄漏，因此每个 property 轮次
+// 使用独立实例 + 独立 mock，确保完全隔离。
+function createFreshService(): { service: LLMService; mockCreate: any } {
+  const before = mockRegistry.fns.length;
+  const service = new LLMService({
+    apiKey: 'test-api-key',
+    baseURL: 'https://test.example.com',
+    model: 'test-model',
+  });
+  const created = mockRegistry.fns.slice(before);
+  return { service, mockCreate: created[created.length - 1] };
+}
 
 describe('LLMService Cache Property-Based Tests', () => {
   let llmService: LLMService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Create a new instance with mock config for each test
     llmService = new LLMService({
       apiKey: 'test-api-key',
       baseURL: 'https://test.example.com',
       model: 'test-model',
     });
-    llmService.clearCache();
+    await llmService.clearCache();
   });
 
   /**
    * Property 3: 缓存一致性
    * Feature: llm-performance-optimization, Property 3: 相同原料组合返回相同结果
    * Validates: Requirements 2.1, 2.5
+   * 
+   * 说明：通过公共 API generateRecommendations 验证——第二次相同调用命中缓存，
+   * 不再触发 LLM 调用，且结果一致。避免直接访问私有缓存方法。
    */
-  it('Property 3: Cache consistency - same ingredients return same results', () => {
+  it('Property 3: Cache consistency - same ingredients return same results', async () => {
     fc.assert(
-      fc.property(
+      fc.asyncProperty(
         // Generate an array of 1-10 ingredient strings
         fc.array(fc.string({ minLength: 1, maxLength: 20 }), { minLength: 1, maxLength: 10 }),
-        (ingredients) => {
-          // Mock data to cache
+        async (ingredients) => {
+          // 每轮独立实例 + 独立 openai mock，避免跨轮/跨测试状态泄漏
+          const { service, mockCreate } = createFreshService();
+
+          // Mock data that "LLM" returns
           const mockData = [
             {
               name: 'Test Cocktail',
@@ -38,17 +105,16 @@ describe('LLMService Cache Property-Based Tests', () => {
             },
           ];
 
-          // Access private method through type assertion for testing
-          const service = llmService as any;
-          
-          // Save to cache
-          service.saveToCache(ingredients, mockData);
+          mockLLMResponse(mockCreate, mockData);
 
-          // Get from cache twice
-          const result1 = service.getFromCache(ingredients);
-          const result2 = service.getFromCache(ingredients);
+          // 第一次：cache miss → 调用 LLM
+          const result1 = await service.generateRecommendations(ingredients);
+          expect(mockCreate).toHaveBeenCalledTimes(1);
 
-          // Both results should be identical
+          // 第二次：cache hit → 不调用 LLM，返回相同结果
+          const result2 = await service.generateRecommendations(ingredients);
+          expect(mockCreate).toHaveBeenCalledTimes(1);
+
           expect(result1).toEqual(result2);
           expect(result1).toEqual(mockData);
         }
@@ -61,12 +127,19 @@ describe('LLMService Cache Property-Based Tests', () => {
    * Property 4: 缓存过期清理
    * Feature: llm-performance-optimization, Property 4: 过期缓存不被返回
    * Validates: Requirements 2.3
+   * 
+   * 保留的私有依赖（getCacheKey / memoryCache）：LLMService 的内存缓存 TTL 基于
+   * 内部 timestamp，公共 API 无法注入"过期时间"，必须直接修改内存缓存条目。
+   * 这是注入过期状态的唯一途径，属于最小必要访问。
    */
-  it('Property 4: Cache expiration - expired cache is not returned', () => {
+  it('Property 4: Cache expiration - expired cache is not returned', async () => {
     fc.assert(
-      fc.property(
+      fc.asyncProperty(
         fc.array(fc.string({ minLength: 1, maxLength: 20 }), { minLength: 1, maxLength: 10 }),
-        (ingredients) => {
+        async (ingredients) => {
+          // 每轮独立实例 + 独立 openai mock，避免跨轮/跨测试状态泄漏
+          const { service, mockCreate } = createFreshService();
+
           const mockData = [
             {
               name: 'Test Cocktail',
@@ -78,26 +151,31 @@ describe('LLMService Cache Property-Based Tests', () => {
             },
           ];
 
-          const service = llmService as any;
-          
-          // Save to cache
-          service.saveToCache(ingredients, mockData);
+          // 第一次调用：cache miss → LLM 生成 → 写入缓存
+          mockLLMResponse(mockCreate, mockData);
+          await service.generateRecommendations(ingredients);
+          expect(mockCreate).toHaveBeenCalledTimes(1);
 
-          // Manually set the timestamp to be expired (more than 30 minutes ago)
-          const cacheKey = service.getCacheKey(ingredients);
-          const cacheEntry = service.cache.get(cacheKey);
+          // 将内存缓存条目标记为过期（31 分钟前）——唯一的私有访问点
+          const svc = service as any;
+          const cacheKey = svc.getCacheKey(ingredients);
+          const cacheEntry = svc.memoryCache.get(cacheKey);
           if (cacheEntry) {
             cacheEntry.timestamp = Date.now() - (31 * 60 * 1000); // 31 minutes ago
           }
 
-          // Try to get from cache - should return null because it's expired
-          const result = service.getFromCache(ingredients);
+          // 第二次调用：缓存过期 → miss → 重新调用 LLM
+          mockLLMResponse(mockCreate, [{ ...mockData[0], name: 'Refreshed Cocktail' }]);
+          const result = await service.generateRecommendations(ingredients);
 
-          // Expired cache should not be returned
-          expect(result).toBeNull();
+          // 过期缓存未命中，LLM 被再次调用，返回新结果
+          expect(mockCreate).toHaveBeenCalledTimes(2);
+          expect(result[0].name).toBe('Refreshed Cocktail');
 
-          // The expired entry should be deleted from cache
-          expect(service.cache.has(cacheKey)).toBe(false);
+          // 旧的过期条目已被删除并重新写入新条目（时间戳接近当前时间）
+          const refreshedEntry = svc.memoryCache.get(cacheKey);
+          expect(refreshedEntry).toBeDefined();
+          expect(Date.now() - refreshedEntry.timestamp).toBeLessThan(60 * 1000);
         }
       ),
       { numRuns: 100 }
@@ -108,6 +186,9 @@ describe('LLMService Cache Property-Based Tests', () => {
    * Property 6: 缓存键规范化
    * Feature: llm-performance-optimization, Property 6: 相同原料不同顺序生成相同键
    * Validates: Requirements 2.5
+   * 
+   * 保留的私有依赖（getCacheKey）：键规范化是 LLMService 的纯内部函数，
+   * 没有公共 API 暴露缓存键。这是验证该行为的唯一途径，属于最小必要访问。
    */
   it('Property 6: Cache key normalization - same ingredients in different order generate same key', () => {
     fc.assert(
@@ -174,27 +255,23 @@ describe('LLMService Cache Property-Based Tests', () => {
 });
 
 describe('LLMService Recommendation Optimization Property-Based Tests', () => {
-  let llmService: LLMService;
-
-  beforeEach(() => {
-    llmService = new LLMService({
-      apiKey: 'test-api-key',
-      baseURL: 'https://test.example.com',
-      model: 'test-model',
-    });
-  });
-
   /**
    * Property 1: 推荐数量限制
    * Feature: llm-performance-optimization, Property 1: 返回结果数量 === 3
    * Validates: Requirements 1.1
+   * 
+   * 说明：通过公共 API generateRecommendations（mock OpenAI）验证解析行为，
+   * 不再直接访问私有解析方法 parseLLMResponse。
    */
-  it('Property 1: Recommendation count limit - returns exactly 3 recommendations', () => {
+  it('Property 1: Recommendation count limit - returns exactly 3 recommendations', async () => {
     fc.assert(
-      fc.property(
+      fc.asyncProperty(
         // Generate random valid JSON responses with varying number of recommendations
         fc.integer({ min: 1, max: 10 }),
-        (count) => {
+        async (count) => {
+          // 每轮独立实例 + 独立 openai mock，避免跨轮/跨测试状态泄漏
+          const { service, mockCreate } = createFreshService();
+
           // Create mock recommendations
           const mockRecommendations = Array.from({ length: count }, (_, i) => ({
             name: `Cocktail ${i + 1}`,
@@ -205,16 +282,14 @@ describe('LLMService Recommendation Optimization Property-Based Tests', () => {
             estimatedTime: (i + 1) * 5,
           }));
 
-          // Create a JSON string response
-          const mockResponse = JSON.stringify(mockRecommendations);
+          mockLLMResponse(mockCreate, mockRecommendations);
 
-          // Parse using the service's parser
-          const service = llmService as any;
-          const parsed = service.parseRecommendations(mockResponse);
+          // 走公共 API：缓存 miss → mock LLM → 解析 → 返回推荐列表
+          const parsed = await service.generateRecommendations(['test-ingredient']);
 
           // The parsed result should match the mock data
           // Note: This test validates the parser works correctly
-          // The actual LLM call would be tested in integration tests
+          // The actual LLM call is mocked, no real API is invoked
           expect(Array.isArray(parsed)).toBe(true);
           expect(parsed.length).toBe(count);
         }
@@ -228,9 +303,9 @@ describe('LLMService Recommendation Optimization Property-Based Tests', () => {
    * Feature: llm-performance-optimization, Property 2: 每个结果包含 6 个必需字段
    * Validates: Requirements 1.2
    */
-  it('Property 2: Field completeness - each recommendation contains exactly 6 required fields', () => {
+  it('Property 2: Field completeness - each recommendation contains exactly 6 required fields', async () => {
     fc.assert(
-      fc.property(
+      fc.asyncProperty(
         // Generate random recommendations with the 6 required fields
         fc.array(
           fc.record({
@@ -243,13 +318,13 @@ describe('LLMService Recommendation Optimization Property-Based Tests', () => {
           }),
           { minLength: 1, maxLength: 5 }
         ),
-        (recommendations) => {
-          // Create a JSON string response
-          const mockResponse = JSON.stringify(recommendations);
+        async (recommendations) => {
+          // 每轮独立实例 + 独立 openai mock，避免跨轮/跨测试状态泄漏
+          const { service, mockCreate } = createFreshService();
+          mockLLMResponse(mockCreate, recommendations);
 
-          // Parse using the service's parser
-          const service = llmService as any;
-          const parsed = service.parseRecommendations(mockResponse);
+          // 走公共 API 解析 LLM 返回的 JSON
+          const parsed = await service.generateRecommendations(['test-ingredient']);
 
           // Verify each recommendation has exactly 6 fields
           const requiredFields = ['name', 'description', 'ingredients', 'steps', 'difficulty', 'estimatedTime'];
