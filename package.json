@@ -12,6 +12,7 @@
     "lint": "eslint",
     "test": "vitest",
     "test:auth": "npx tsx scripts/test-auth.ts",
+    "eval:recommendation-quality": "tsx scripts/evaluate-recommendation-quality.ts",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "typecheck": "tsc --noEmit"
